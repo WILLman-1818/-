@@ -12,6 +12,97 @@ let state = {
   context: "group"
 };
 
+const teamNameMap = {
+  "Argentina": "阿根廷",
+  "Australia": "澳大利亚",
+  "Austria": "奥地利",
+  "Belgium": "比利时",
+  "Bolivia": "玻利维亚",
+  "Bosnia & Herzegovina": "波黑",
+  "Bosnia and Herzegovina": "波黑",
+  "Brazil": "巴西",
+  "Cabo Verde": "佛得角",
+  "Cameroon": "喀麦隆",
+  "Canada": "加拿大",
+  "Cape Verde": "佛得角",
+  "Chile": "智利",
+  "Colombia": "哥伦比亚",
+  "Congo DR": "刚果民主共和国",
+  "Costa Rica": "哥斯达黎加",
+  "Croatia": "克罗地亚",
+  "Curaçao": "库拉索",
+  "Curacao": "库拉索",
+  "Czech Republic": "捷克",
+  "Czechia": "捷克",
+  "Denmark": "丹麦",
+  "DR Congo": "刚果民主共和国",
+  "Ecuador": "厄瓜多尔",
+  "Egypt": "埃及",
+  "England": "英格兰",
+  "France": "法国",
+  "Germany": "德国",
+  "Ghana": "加纳",
+  "Haiti": "海地",
+  "Honduras": "洪都拉斯",
+  "Iran": "伊朗",
+  "IR Iran": "伊朗",
+  "Italy": "意大利",
+  "Ivory Coast": "科特迪瓦",
+  "Jamaica": "牙买加",
+  "Japan": "日本",
+  "Jordan": "约旦",
+  "Korea Republic": "韩国",
+  "Mexico": "墨西哥",
+  "Morocco": "摩洛哥",
+  "Netherlands": "荷兰",
+  "New Zealand": "新西兰",
+  "Nigeria": "尼日利亚",
+  "Norway": "挪威",
+  "Panama": "巴拿马",
+  "Paraguay": "巴拉圭",
+  "Peru": "秘鲁",
+  "Poland": "波兰",
+  "Portugal": "葡萄牙",
+  "Qatar": "卡塔尔",
+  "Saudi Arabia": "沙特阿拉伯",
+  "Scotland": "苏格兰",
+  "Senegal": "塞内加尔",
+  "Serbia": "塞尔维亚",
+  "South Africa": "南非",
+  "South Korea": "韩国",
+  "Spain": "西班牙",
+  "Sweden": "瑞典",
+  "Switzerland": "瑞士",
+  "Tunisia": "突尼斯",
+  "Turkey": "土耳其",
+  "Türkiye": "土耳其",
+  "Uruguay": "乌拉圭",
+  "USA": "美国",
+  "United States": "美国",
+  "Uzbekistan": "乌兹别克斯坦",
+  "Venezuela": "委内瑞拉"
+};
+
+const venueNameMap = {
+  "AT&T Stadium": "AT&T 体育场",
+  "BC Place": "BC Place 体育场",
+  "BMO Field": "BMO 球场",
+  "Dallas Stadium": "达拉斯体育场",
+  "Estadio Akron": "阿克伦体育场",
+  "Estadio Azteca": "阿兹特克体育场",
+  "Gillette Stadium": "吉列体育场",
+  "Hard Rock Stadium": "硬石体育场",
+  "Houston Stadium": "休斯敦体育场",
+  "Levi's Stadium": "李维斯体育场",
+  "Lincoln Financial Field": "林肯金融球场",
+  "Lumen Field": "流明球场",
+  "Mercedes-Benz Stadium": "梅赛德斯-奔驰体育场",
+  "MetLife Stadium": "大都会人寿体育场",
+  "Mexico City Stadium": "墨西哥城体育场",
+  "SoFi Stadium": "SoFi 体育场",
+  "Toronto Stadium": "多伦多体育场"
+};
+
 async function loadLiveData() {
   try {
     const response = await fetch("/.netlify/functions/live-data", { cache: "no-store" });
@@ -20,6 +111,7 @@ async function loadLiveData() {
     mergeLiveMatches(payload.matches || []);
     mergeLiveTeams(payload.teams || {});
     if (payload.bracket) bracketTree = payload.bracket;
+    syncActiveMatchToNearest();
     updateLiveStatus(payload.source || "实时接口", payload.updatedAt || new Date().toISOString());
   } catch {
     updateLiveStatus("本地样例数据", "等待接口接入");
@@ -49,6 +141,94 @@ function mergeLiveTeams(liveTeams) {
   Object.entries(liveTeams).forEach(([teamName, profile]) => {
     teams[teamName] = { ...(teams[teamName] || {}), ...profile };
   });
+}
+
+function displayTeam(teamName) {
+  return teamNameMap[teamName] || teamName || "待定";
+}
+
+function displayVenue(venue) {
+  if (!venue) return "场地待定";
+  return venueNameMap[venue] || venue.replace(/\bStadium\b/g, "体育场").replace(/\bField\b/g, "球场");
+}
+
+function displayStage(stage) {
+  if (!stage) return "世界杯赛程";
+  const groupRound = stage.match(/Group Stage\s*-\s*(\d+)/i);
+  if (groupRound) return `世界杯小组赛 · 第 ${groupRound[1]} 轮`;
+  return stage
+    .replace(/FIFA World Cup/gi, "世界杯")
+    .replace(/World Cup/gi, "世界杯")
+    .replace(/Group Stage/gi, "小组赛")
+    .replace(/Round of 32/gi, "32 强")
+    .replace(/Round of 16/gi, "16 强")
+    .replace(/Quarter[-\s]?finals?/gi, "8 强")
+    .replace(/Semi[-\s]?finals?/gi, "半决赛")
+    .replace(/Final/gi, "决赛")
+    .replace(/\s+-\s+(\d+)/g, " · 第 $1 轮");
+}
+
+function fixtureTitle(match) {
+  return `${displayTeam(match.home)} vs ${displayTeam(match.away)}`;
+}
+
+function displayPlayerName(player, teamName) {
+  return String(player.name || "").replace(teamName, displayTeam(teamName));
+}
+
+function isFinishedMatch(match) {
+  const status = String(match.status || match.statusShort || "").toLowerCase();
+  return Boolean(match.locked) || ["archived", "finished", "ft", "aet", "pen"].includes(status);
+}
+
+function isLiveMatch(match) {
+  const status = String(match.status || match.statusShort || "").toLowerCase();
+  return ["live", "1h", "2h", "ht", "et", "p"].includes(status);
+}
+
+function parseMatchTimestamp(match) {
+  const value = String(match.timeCN || "").trim();
+  const cnMatch = value.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})\D+(\d{1,2}):(\d{2})/);
+  if (cnMatch) {
+    const [, year, month, day, hour, minute] = cnMatch.map(Number);
+    return new Date(year, month - 1, day, hour, minute).getTime();
+  }
+  const dateMatch = String(match.date || "").match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (dateMatch) {
+    const [, year, month, day] = dateMatch.map(Number);
+    return new Date(year, month - 1, day, 23, 59).getTime();
+  }
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function getSortedMatches() {
+  const now = Date.now();
+  return [...matches].sort((a, b) => {
+    const aTime = parseMatchTimestamp(a);
+    const bTime = parseMatchTimestamp(b);
+    const aFinished = isFinishedMatch(a) || aTime < now - 2 * 60 * 60 * 1000;
+    const bFinished = isFinishedMatch(b) || bTime < now - 2 * 60 * 60 * 1000;
+    const aGroup = isLiveMatch(a) ? 0 : aFinished ? 2 : 1;
+    const bGroup = isLiveMatch(b) ? 0 : bFinished ? 2 : 1;
+    if (aGroup !== bGroup) return aGroup - bGroup;
+    if (aGroup === 2) return bTime - aTime;
+    return aTime - bTime;
+  });
+}
+
+function syncActiveMatchToNearest() {
+  const sorted = getSortedMatches();
+  if (!sorted.length) return;
+  if (!state.match || isFinishedMatch(state.match)) state.match = sorted[0];
+}
+
+function statusLabel(match) {
+  if (isFinishedMatch(match)) {
+    const hasScore = typeof match.homeScore === "number" && typeof match.awayScore === "number";
+    return hasScore ? `完赛 · ${match.homeScore}-${match.awayScore}` : "完赛";
+  }
+  if (isLiveMatch(match)) return "进行中，实时更新";
+  return match.context || "未开赛，赛前数据持续更新";
 }
 
 function hashText(text) {
@@ -158,16 +338,17 @@ function calculateForecast() {
 function renderMatches() {
   const list = document.querySelector("#match-list");
   const select = document.querySelector("#match-select");
+  const sortedMatches = getSortedMatches();
   list.innerHTML = "";
   select.innerHTML = "";
-  matches.forEach((match) => {
+  sortedMatches.forEach((match) => {
     const card = document.createElement("article");
     card.className = `match-card${match.id === state.match.id ? " active" : ""}`;
     card.innerHTML = `
-      <span>${match.stage} · ${match.timeCN}</span>
-      <strong>${match.home} vs ${match.away}</strong>
-      <span>${match.venue}</span>
-      <b>${match.locked ? "已归档，不再实时更新" : match.context}</b>
+      <span>${displayStage(match.stage)} · ${match.timeCN}</span>
+      <strong>${fixtureTitle(match)}</strong>
+      <span>${displayVenue(match.venue)}</span>
+      <b>${statusLabel(match)}</b>
     `;
     card.addEventListener("click", () => {
       state.match = match;
@@ -178,7 +359,7 @@ function renderMatches() {
 
     const option = document.createElement("option");
     option.value = match.id;
-    option.textContent = `${match.home} vs ${match.away}`;
+    option.textContent = fixtureTitle(match);
     if (match.id === state.match.id) option.selected = true;
     select.appendChild(option);
   });
@@ -197,10 +378,10 @@ function renderBracket() {
               .map(
                 (match) => `
                   <article class="bracket-match">
-                    <span>${match.label}</span>
-                    <strong class="${match.winner === match.home ? "winner" : ""}">${match.home || "待定"}</strong>
-                    <strong class="${match.winner === match.away ? "winner" : ""}">${match.away || "待定"}</strong>
-                    <em>${match.winner ? "晋级：" + match.winner : "晋级待定"}</em>
+                    <span>${displayStage(match.label)}</span>
+                    <strong class="${match.winner === match.home ? "winner" : ""}">${displayTeam(match.home)}</strong>
+                    <strong class="${match.winner === match.away ? "winner" : ""}">${displayTeam(match.away)}</strong>
+                    <em>${match.winner ? "晋级：" + displayTeam(match.winner) : "晋级待定"}</em>
                   </article>
                 `
               )
@@ -237,7 +418,7 @@ function renderScores(forecast) {
         <article class="score-card">
           <span>${label}</span>
           <strong>${score.home} : ${score.away}</strong>
-          <span>${forecast.match.home} ${score.home}-${score.away} ${forecast.match.away} · 概率 ${score.probability}%</span>
+          <span>${displayTeam(forecast.match.home)} ${score.home}-${score.away} ${displayTeam(forecast.match.away)} · 概率 ${score.probability}%</span>
           <div class="probability-bar"><i style="width:${score.probability}%"></i></div>
         </article>
       `;
@@ -247,21 +428,26 @@ function renderScores(forecast) {
 
 function renderEvidence(forecast) {
   const { match, home, away, gua } = forecast;
+  const homeName = displayTeam(match.home);
+  const awayName = displayTeam(match.away);
   document.querySelector("#liuyao-analysis").innerHTML = `
-    <p>本卦为<strong>${gua.baseGua}</strong>，变卦为<strong>${gua.changedGua}</strong>。六爻里，世爻代表 ${match.home}，应爻代表 ${match.away}。当前盘面显示：${gua.shiYing}。</p>
+    <p>本卦为<strong>${gua.baseGua}</strong>，变卦为<strong>${gua.changedGua}</strong>。六爻里，世爻代表 ${homeName}，应爻代表 ${awayName}。当前盘面显示：${gua.shiYing}。</p>
     <p>${gua.usefulGod}。动爻数量为 ${gua.movingCount}，说明比赛不是单纯低速消耗局，而是存在明确变盘窗口。若应爻发动强于世爻，客队的进球概率会被抬高；若世爻稳定，主队至少有守住基本盘的能力。</p>
   `;
   document.querySelector("#player-analysis").innerHTML = `
-    <p>${match.home} 攻击 ${home.attack}、防守 ${home.defense}、经验 ${home.experience}；${match.away} 攻击 ${away.attack}、防守 ${away.defense}、经验 ${away.experience}。</p>
+    <p>${homeName} 攻击 ${home.attack}、防守 ${home.defense}、经验 ${home.experience}；${awayName} 攻击 ${away.attack}、防守 ${away.defense}、经验 ${away.experience}。</p>
     <div class="player-table">
-      ${[...teams[match.home].players.slice(0, 3), ...teams[match.away].players.slice(0, 3)]
-        .map((player) => `<div class="player-row"><span>${player.name} · ${player.role}</span><b>${player.influence}</b></div>`)
+      ${[
+        ...teams[match.home].players.slice(0, 3).map((player) => ({ player, teamName: match.home })),
+        ...teams[match.away].players.slice(0, 3).map((player) => ({ player, teamName: match.away }))
+      ]
+        .map(({ player, teamName }) => `<div class="player-row"><span>${displayPlayerName(player, teamName)} · ${player.role}</span><b>${player.influence}</b></div>`)
         .join("")}
     </div>
   `;
   document.querySelector("#history-analysis").innerHTML = `
-    <p>${match.home}：${teams[match.home].recentExperience}</p>
-    <p>${match.away}：${teams[match.away].recentExperience}</p>
+    <p>${homeName}：${teams[match.home].recentExperience}</p>
+    <p>${awayName}：${teams[match.away].recentExperience}</p>
     <p>过往经验层不是直接决定比分，而是修正六爻与球员数据的极端值：大赛经验高的球队更容易守住比分，经验少但冲击力强的球队更容易制造单点爆冷。</p>
   `;
 }
@@ -270,7 +456,7 @@ function renderReport(forecast) {
   const top = forecast.scores[0];
   const scoreText = forecast.scores.map((s) => `${s.home}-${s.away}（${s.probability}%）`).join("、");
   document.querySelector("#report-body").innerHTML = `
-    <h3>${forecast.match.home} vs ${forecast.match.away} 六爻比分推演</h3>
+    <h3>${fixtureTitle(forecast.match)} 六爻比分推演</h3>
     <p>本场主推比分为 <strong>${top.home}-${top.away}</strong>，其余备选比分为：${scoreText}。</p>
     <p>推演逻辑：六爻盘面以 ${forecast.gua.baseGua} 变 ${forecast.gua.changedGua} 为主线，世应关系显示“${forecast.gua.shiYing}”；球员数据层面，双方攻击、防守、门将与核心球员影响力共同决定预期进球区间；过往赛事经验用于修正大赛稳定性和爆冷风险。</p>
     <p>内容口径：发布时可以把重点放在“六爻显示的变盘窗口 + 核心球员能否兑现数据优势 + 大赛经验是否压住风险”。这比只说一个比分更容易让读者理解为什么会出现这组概率。</p>
@@ -345,6 +531,7 @@ function drawSky() {
   requestAnimationFrame(frame);
 }
 
+syncActiveMatchToNearest();
 bindForm();
 loadLiveData().finally(renderAll);
 drawSky();

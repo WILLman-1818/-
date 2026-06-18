@@ -101,13 +101,13 @@ function normalizeFixtures(fixtures) {
         : "",
       stage: `${league.name || "World Cup"} · ${league.round || ""}`.trim(),
       venue: fixture.venue?.name || "",
-      status: isFinished ? "archived" : statusShort === "NS" ? "scheduled" : "live",
+      status: isFinished ? "finished" : statusShort === "NS" ? "scheduled" : "live",
       locked: isFinished,
       home: teams.home?.name || "待定",
       away: teams.away?.name || "待定",
       homeScore: goals.home,
       awayScore: goals.away,
-      context: isFinished ? "已完赛，进入历史归档，不再实时覆盖。" : "实时赛程数据，赛前请继续关注首发、伤停与阵容变化。",
+      context: isFinished ? "完赛，保留赛果记录，不再实时覆盖。" : "实时赛程数据，赛前请继续关注首发、伤停与阵容变化。",
       sourceNote: "API-FOOTBALL 实时赛程"
     };
   });
@@ -202,7 +202,7 @@ function placeholderMatches(roundName) {
 }
 
 function inferWinner(match) {
-  if (match.status !== "archived") return "";
+  if (!["archived", "finished"].includes(match.status)) return "";
   if (typeof match.homeScore !== "number" || typeof match.awayScore !== "number") return "";
   if (match.homeScore > match.awayScore) return match.home;
   if (match.awayScore > match.homeScore) return match.away;
