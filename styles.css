@@ -651,6 +651,17 @@ select {
   line-height: 1.6;
 }
 
+.score-card-muted {
+  background:
+    linear-gradient(135deg, rgba(255, 250, 238, 0.82), rgba(215, 198, 166, 0.68)),
+    var(--paper);
+}
+
+.score-card-muted strong {
+  color: rgba(24, 18, 13, 0.62);
+  font-size: 34px;
+}
+
 .probability-bar {
   height: 10px;
   overflow: hidden;

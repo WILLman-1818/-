@@ -37,7 +37,7 @@
               <p class="eyebrow">Setup</p>
               <h2>起卦参数</h2>
             </div>
-            <form id="match-form">
+            <form id="match-form" data-redirect="./scores.html">
               <label>比赛<select id="match-select" name="match"></select></label>
               <label>起卦时间<input id="cast-time" type="datetime-local" value="2026-06-18T01:00" /></label>
               <label>
@@ -57,8 +57,8 @@
                 </select>
               </label>
               <div class="button-row">
-                <button type="submit">重新推演</button>
-                <a class="secondary-button" href="./scores.html">查看比分</a>
+                <button type="submit">重新推演并查看比分</button>
+                <a id="view-scores" class="secondary-button" href="./scores.html" data-save-route>查看比分</a>
               </div>
             </form>
           </div>

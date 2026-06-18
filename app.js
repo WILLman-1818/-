@@ -14,6 +14,26 @@ const scoreGates = [
   { name: "兄弟争持", tone: "兄弟爻旺，身体对抗和节奏争夺加重，比分容易胶着。", pace: -0.12, draw: 0.22 },
   { name: "动爻翻局", tone: "动爻牵动世应，比赛中段存在明显转折，比分不宜只看静态强弱。", pace: 0.18, draw: -0.14 }
 ];
+const historicalScorePriors = {
+  "1-0": 0.026,
+  "2-1": 0.03,
+  "2-0": 0.022,
+  "1-1": 0.024,
+  "3-1": 0.018,
+  "0-1": 0.02,
+  "1-2": 0.022,
+  "2-2": 0.016,
+  "3-2": 0.012,
+  "0-0": 0.01
+};
+const gateAnchors = {
+  "守中求破": ["1-0", "0-1", "2-0", "0-2", "2-1"],
+  "子孙发动": ["2-1", "1-2", "3-1", "2-2", "3-2"],
+  "财旺生攻": ["2-0", "3-1", "2-1", "3-0", "1-2"],
+  "官鬼压身": ["2-0", "0-2", "2-1", "1-2", "3-1"],
+  "兄弟争持": ["1-1", "2-1", "1-2", "2-2", "1-0"],
+  "动爻翻局": ["2-2", "3-2", "2-3", "2-1", "1-2"]
+};
 
 const storedMatchId = window.localStorage?.getItem("liuyao-selected-match");
 const storedCastTime = window.localStorage?.getItem("liuyao-cast-time");
@@ -493,6 +513,28 @@ function omenScoreBias(gua, homeGoals, awayGoals, homePower, awayPower) {
   return bias;
 }
 
+function finishedGoalBaseline() {
+  const finished = matches.filter((match) => hasFinalScore(match));
+  if (!finished.length) return 0;
+  const averageGoals = finished.reduce((sum, match) => sum + match.homeScore + match.awayScore, 0) / finished.length;
+  return clamp((averageGoals - 2.45) / 5, -0.16, 0.24);
+}
+
+function historicalScoreBias(gua, homeGoals, awayGoals, homePower, awayPower) {
+  const key = `${homeGoals}-${awayGoals}`;
+  const reverseKey = `${awayGoals}-${homeGoals}`;
+  const anchors = gateAnchors[gua.scoreGate] || [];
+  const dataEdge = homePower.attack + homePower.form + homePower.experience - awayPower.attack - awayPower.form - awayPower.experience;
+  let bias = historicalScorePriors[key] || (historicalScorePriors[reverseKey] ? historicalScorePriors[reverseKey] * 0.72 : 0);
+  if (anchors.includes(key)) bias += 0.034;
+  if (anchors.includes(reverseKey)) bias += 0.018;
+  if (dataEdge > 24 && homeGoals > awayGoals && homeGoals >= 2) bias += 0.016;
+  if (dataEdge < -24 && awayGoals > homeGoals && awayGoals >= 2) bias += 0.016;
+  if (gua.paceBoost > 0.16 && homeGoals + awayGoals >= 3) bias += 0.018;
+  if (gua.paceBoost < -0.16 && homeGoals + awayGoals >= 4) bias -= 0.012;
+  return Math.max(0, bias);
+}
+
 function calculateForecast() {
   const match = state.match;
   const home = teamPower(match.home);
@@ -504,13 +546,14 @@ function calculateForecast() {
     data: { liuyao: 0.35, data: 0.65 }
   }[state.dataWeight];
   const contextPace = { group: 0.08, mustwin: 0.22, cautious: -0.18 }[state.context];
+  const recentGoalLift = finishedGoalBaseline();
   const seedNoise = ((hashText(`${match.id}|${state.castTime}|score-qimen`) % 41) - 20) / 160;
   const homeDataEdge = (home.attack - away.defense) / 22 + (home.form - away.form) / 52 + (home.experience - away.experience) / 54 + (home.setPiece - away.setPiece) / 92;
   const awayDataEdge = (away.attack - home.defense) / 22 + (away.form - home.form) / 52 + (away.experience - home.experience) / 54 + (away.setPiece - home.setPiece) / 92;
   const homeQuality = (home.attack + home.setPiece - 142) / 110;
   const awayQuality = (away.attack + away.setPiece - 142) / 110;
-  const homeLambda = clamp(1.12 + homeQuality + homeDataEdge * weights.data + gua.homeBoost * weights.liuyao * 1.25 + gua.paceBoost + contextPace + seedNoise, 0.2, 5.2);
-  const awayLambda = clamp(1.08 + awayQuality + awayDataEdge * weights.data + gua.awayBoost * weights.liuyao * 1.25 + gua.paceBoost + contextPace - seedNoise / 2, 0.2, 5.2);
+  const homeLambda = clamp(1.28 + homeQuality + homeDataEdge * weights.data + gua.homeBoost * weights.liuyao * 1.32 + gua.paceBoost + contextPace + recentGoalLift + seedNoise, 0.2, 5.4);
+  const awayLambda = clamp(1.22 + awayQuality + awayDataEdge * weights.data + gua.awayBoost * weights.liuyao * 1.32 + gua.paceBoost + contextPace + recentGoalLift - seedNoise / 2, 0.2, 5.4);
   const targetHome = clamp(Math.round(homeLambda + gua.homeBoost + (home.attack - away.defense) / 95), 0, 5);
   const targetAway = clamp(Math.round(awayLambda + gua.awayBoost + (away.attack - home.defense) / 95), 0, 5);
   const candidates = [];
@@ -521,21 +564,21 @@ function calculateForecast() {
       const targetFit = h === targetHome && a === targetAway ? 0.34 : h === targetHome || a === targetAway ? 0.12 : 0;
       const guaFit = scoreFitByGua(gua, h, a, home, away);
       const omenBias = omenScoreBias(gua, h, a, home, away);
-      const salt = 1 + (((hashText(`${gua.seed}|${h}-${a}|${match.home}|${match.away}`) % 23) - 11) / 150);
+      const historyBias = historicalScoreBias(gua, h, a, home, away);
+      const salt = 1 + (((hashText(`${gua.seed}|${h}-${a}|${match.home}|${match.away}`) % 29) - 14) / 120);
       const extremeBrake = h + a >= 7 ? 0.72 : 1;
-      candidates.push({ home: h, away: a, raw: (base * guaFit + setPieceBump + targetFit * base + omenBias) * salt * extremeBrake });
+      const raw = (base * guaFit + setPieceBump + targetFit * base + omenBias + historyBias) * salt * extremeBrake;
+      candidates.push({ home: h, away: a, raw, adjusted: Math.pow(Math.max(raw, 0.00001), 1.42) });
     }
   }
   candidates.sort((a, b) => b.raw - a.raw);
   const top = candidates.slice(0, 4);
-  const total = top.reduce((sum, item) => sum + item.raw, 0);
+  const total = candidates.reduce((sum, item) => sum + item.adjusted, 0);
   const scores = top.map((item) => ({
     ...item,
-    probability: Math.round((item.raw / total) * 100)
+    probability: Math.max(1, Math.round((item.adjusted / total) * 100))
   }));
-  const diff = 100 - scores.reduce((sum, item) => sum + item.probability, 0);
-  scores[0].probability += diff;
-  return { match, home, away, gua, homeLambda, awayLambda, scores };
+  return { match, home, away, gua, homeLambda, awayLambda, scores, otherProbability: Math.max(0, 100 - scores.reduce((sum, item) => sum + item.probability, 0)), recentGoalLift };
 }
 
 function populateMatchSelect(select) {
@@ -632,27 +675,35 @@ function renderScores(forecast) {
         <article class="score-card">
           <span>${label}</span>
           <strong>${score.home} : ${score.away}</strong>
-          <span>${displayTeam(forecast.match.home)} ${score.home}-${score.away} ${displayTeam(forecast.match.away)} · 概率 ${score.probability}%</span>
+          <span>${displayTeam(forecast.match.home)} ${score.home}-${score.away} ${displayTeam(forecast.match.away)} · 全局占比 ${score.probability}%</span>
           <div class="probability-bar"><i style="width:${score.probability}%"></i></div>
         </article>
       `;
     })
-    .join("");
+    .join("") +
+    `
+      <article class="score-card score-card-muted">
+        <span>其它比分合计</span>
+        <strong>${forecast.otherProbability}%</strong>
+        <span>剩余低概率比分池，不作为主推推荐。</span>
+        <div class="probability-bar"><i style="width:${forecast.otherProbability}%"></i></div>
+      </article>
+    `;
 }
 
 function renderScoreInsights(forecast) {
   const box = document.querySelector("#score-insights");
   if (!box) return;
-  const { match, home, away, gua, homeLambda, awayLambda, scores } = forecast;
+  const { match, home, away, gua, homeLambda, awayLambda, scores, otherProbability, recentGoalLift } = forecast;
   const homeName = displayTeam(match.home);
   const awayName = displayTeam(match.away);
   const top = scores[0];
   const totalGoalBand = top.home + top.away <= 2 ? "低到中比分区间" : "中高比分区间";
   const edgeText =
     homeLambda > awayLambda + 0.18
-      ? `${homeName} 的预期进球略高，主队方向更稳。`
+      ? `${homeName}的预期进球略高，主队方向更稳。`
       : awayLambda > homeLambda + 0.18
-        ? `${awayName} 的预期进球略高，客队存在抢结果能力。`
+        ? `${awayName}的预期进球略高，客队存在抢结果能力。`
         : "双方预期进球接近，平局和一球差比分权重更高。";
   box.innerHTML = `
     <article class="panel data-panel">
@@ -663,12 +714,12 @@ function renderScoreInsights(forecast) {
         <div><dt>比分带</dt><dd>${totalGoalBand}</dd></div>
         <div><dt>主推</dt><dd>${top.home}-${top.away}</dd></div>
       </dl>
-      <p>${edgeText}本场卦门为“${gua.scoreGate}”：${gua.gateTone} 预期进球不是最终比分，而是把球员评分、球队攻防、比赛压力和卦象动爻合并后的进球重心。</p>
+      <p>${edgeText}本场卦门为“${gua.scoreGate}”：${gua.gateTone} 预期进球不是最终比分，而是把球员评分、球队攻防、比赛压力、往届比分基线、已完赛进球均值和卦象动爻合并后的进球重心。</p>
     </article>
     <article class="panel data-panel">
       <h3>比分为什么集中在这几组</h3>
       <p>六爻盘面显示“${gua.shiYing}”，${gua.usefulGod}。本场不是套用固定比分模板，而是先看世应强弱，再看子孙、官鬼、兄弟三类爻对进球、压力和胶着程度的牵引。</p>
-      <p>当前 ${homeName} 攻击 ${home.attack} / 防守 ${home.defense}，${awayName} 攻击 ${away.attack} / 防守 ${away.defense}。双方防守和门将评分共同压住极端大比分，所以系统只输出最有内容解释价值的 4 个候选比分。</p>
+      <p>当前 ${homeName} 攻击 ${home.attack} / 防守 ${home.defense}，${awayName} 攻击 ${away.attack} / 防守 ${away.defense}。已完赛进球修正为 ${recentGoalLift.toFixed(2)}，其它比分池仍占 ${otherProbability}%，说明前四个比分是主推窗口，不是把整场概率平均分给四个答案。</p>
     </article>
     <article class="panel data-panel">
       <h3>发布口径</h3>
@@ -812,23 +863,33 @@ function bindForm() {
   const form = document.querySelector("#match-form");
   const select = document.querySelector("#match-select");
   const copyButton = document.querySelector("#copy-report");
-  if (!form && !select && !copyButton) return;
+  const saveRouteLinks = document.querySelectorAll("[data-save-route]");
+  if (!form && !select && !copyButton && !saveRouteLinks.length) return;
   if (document.querySelector("#cast-time")) document.querySelector("#cast-time").value = state.castTime;
   if (document.querySelector("#data-weight")) document.querySelector("#data-weight").value = state.dataWeight;
   if (document.querySelector("#match-context")) document.querySelector("#match-context").value = state.context;
-  if (form) form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    state.match = matches.find((match) => match.id === document.querySelector("#match-select")?.value) || matches[0];
+  const syncStateFromControls = () => {
+    state.match = matches.find((match) => match.id === document.querySelector("#match-select")?.value) || state.match || matches[0];
     state.castTime = document.querySelector("#cast-time")?.value || state.castTime;
     state.dataWeight = document.querySelector("#data-weight")?.value || state.dataWeight;
     state.context = document.querySelector("#match-context")?.value || state.context;
     persistState();
+  };
+  if (form) form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    syncStateFromControls();
     renderAll();
+    if (form.dataset.redirect) window.location.href = form.dataset.redirect;
   });
   if (select) select.addEventListener("change", (event) => {
     state.match = matches.find((match) => match.id === event.target.value) || matches[0];
     persistState();
     renderAll();
+  });
+  saveRouteLinks.forEach((link) => {
+    link.addEventListener("click", () => {
+      syncStateFromControls();
+    });
   });
   if (copyButton) copyButton.addEventListener("click", async () => {
     const text = document.querySelector("#report-body")?.innerText || "";
