@@ -4,6 +4,16 @@ let bracketTree = window.WORLD_CUP_BRACKET || { rounds: [] };
 
 const guaNames = ["乾为天", "坤为地", "水雷屯", "山水蒙", "水火既济", "雷火丰", "风雷益", "泽火革", "山泽损", "火地晋"];
 const lineLabels = ["初爻", "二爻", "三爻", "四爻", "五爻", "上爻"];
+const sixRelatives = ["子孙", "官鬼", "妻财", "父母", "兄弟", "子孙"];
+const fiveElements = ["木", "火", "土", "金", "水"];
+const scoreGates = [
+  { name: "守中求破", tone: "父母、官鬼成势，比赛先看防守秩序，进球多来自一次破局。", pace: -0.18, draw: 0.18 },
+  { name: "子孙发动", tone: "子孙爻得气，临门一脚和二次进攻被打开，进球窗口会更明显。", pace: 0.24, draw: -0.06 },
+  { name: "财旺生攻", tone: "财爻带动控球和推进，强队更容易把场面优势转成比分。", pace: 0.12, draw: -0.1 },
+  { name: "官鬼压身", tone: "官鬼临要位，犯错、压迫和心理负担会放大，弱势方更容易丢关键球。", pace: -0.04, draw: -0.16 },
+  { name: "兄弟争持", tone: "兄弟爻旺，身体对抗和节奏争夺加重，比分容易胶着。", pace: -0.12, draw: 0.22 },
+  { name: "动爻翻局", tone: "动爻牵动世应，比赛中段存在明显转折，比分不宜只看静态强弱。", pace: 0.18, draw: -0.14 }
+];
 
 const storedMatchId = window.localStorage?.getItem("liuyao-selected-match");
 const storedCastTime = window.localStorage?.getItem("liuyao-cast-time");
@@ -51,6 +61,7 @@ const teamNameMap = {
   "Honduras": "洪都拉斯",
   "Iran": "伊朗",
   "IR Iran": "伊朗",
+  "Iraq": "伊拉克",
   "Italy": "意大利",
   "Ivory Coast": "科特迪瓦",
   "Jamaica": "牙买加",
@@ -63,6 +74,7 @@ const teamNameMap = {
   "New Zealand": "新西兰",
   "Nigeria": "尼日利亚",
   "Norway": "挪威",
+  "Algeria": "阿尔及利亚",
   "Panama": "巴拿马",
   "Paraguay": "巴拉圭",
   "Peru": "秘鲁",
@@ -140,14 +152,14 @@ function persistState() {
 
 function mergeLiveMatches(liveMatches) {
   liveMatches.forEach((liveMatch) => {
-    const localMatch = matches.find((match) => match.id === liveMatch.id);
+    const localMatch = matches.find((match) => match.id === liveMatch.id) || matches.find((match) => matchIdentityKey(match) === matchIdentityKey(liveMatch));
     if (!localMatch) {
       matches.push(liveMatch);
       return;
     }
-    if (localMatch.locked || localMatch.status === "archived" || localMatch.status === "finished") return;
-    Object.assign(localMatch, liveMatch);
+    mergeMatchRecord(localMatch, liveMatch);
   });
+  compactDuplicateMatches();
 }
 
 function mergeLiveTeams(liveTeams) {
@@ -189,6 +201,12 @@ function displayPlayerName(player, teamName) {
   return String(player.name || "").replace(teamName, displayTeam(teamName));
 }
 
+function canonicalTeamName(teamName) {
+  return displayTeam(teamName)
+    .toLowerCase()
+    .replace(/\s|·|\.|'|’|-|&|和|共和国|体育|足球|国家队/g, "");
+}
+
 function isFinishedMatch(match) {
   const status = String(match.status || match.statusShort || "").toLowerCase();
   return Boolean(match.locked) || ["archived", "finished", "ft", "aet", "pen"].includes(status);
@@ -212,6 +230,60 @@ function parseMatchTimestamp(match) {
     return new Date(year, month - 1, day, 23, 59).getTime();
   }
   return Number.MAX_SAFE_INTEGER;
+}
+
+function matchIdentityKey(match) {
+  const teamPair = [canonicalTeamName(match.home), canonicalTeamName(match.away)].sort().join("vs");
+  const time = parseMatchTimestamp(match);
+  const timeKey = time === Number.MAX_SAFE_INTEGER ? String(match.timeCN || match.date || "") : new Date(time).toISOString().slice(0, 16);
+  return `${teamPair}|${timeKey}`;
+}
+
+function hasFinalScore(match) {
+  return typeof match.homeScore === "number" && typeof match.awayScore === "number";
+}
+
+function mergeMatchRecord(target, source) {
+  const targetFinished = isFinishedMatch(target);
+  const sourceFinished = isFinishedMatch(source);
+  const shouldKeepLocalNames = target.home !== "待定" && target.away !== "待定";
+  const next = {
+    ...source,
+    id: target.id,
+    home: shouldKeepLocalNames ? target.home : source.home,
+    away: shouldKeepLocalNames ? target.away : source.away,
+    status: sourceFinished || targetFinished ? "finished" : source.status || target.status,
+    locked: sourceFinished || targetFinished,
+    context: source.context || target.context,
+    sourceNote: source.sourceNote || target.sourceNote
+  };
+  if (!hasFinalScore(source) && hasFinalScore(target)) {
+    next.homeScore = target.homeScore;
+    next.awayScore = target.awayScore;
+  }
+  Object.assign(target, next);
+}
+
+function compactDuplicateMatches() {
+  const byIdentity = new Map();
+  const unique = [];
+  matches.forEach((match) => {
+    const key = matchIdentityKey(match);
+    const existing = byIdentity.get(key);
+    if (!existing) {
+      byIdentity.set(key, match);
+      unique.push(match);
+      return;
+    }
+    const preferredSource = hasFinalScore(match) && !hasFinalScore(existing) ? match : existing;
+    const secondarySource = preferredSource === match ? existing : match;
+    mergeMatchRecord(preferredSource, secondarySource);
+    byIdentity.set(key, preferredSource);
+    const index = unique.indexOf(existing);
+    if (index >= 0 && preferredSource !== existing) unique[index] = preferredSource;
+  });
+  matches.splice(0, matches.length, ...unique);
+  state.match = matches.find((match) => match.id === state.match?.id) || matches.find((match) => matchIdentityKey(match) === matchIdentityKey(state.match || {})) || state.match;
 }
 
 function getSortedMatches() {
@@ -291,27 +363,68 @@ function teamPower(teamName) {
 function castHexagram(match, castTime) {
   const seed = hashText(`${match.id}|${castTime}|${match.home}|${match.away}`);
   const lines = Array.from({ length: 6 }, (_, index) => {
-    const value = (seed >> (index * 3)) & 7;
+    const value = (seed >> ((index * 5) % 24)) & 31;
+    const relative = sixRelatives[(seed + index * 7) % sixRelatives.length];
+    const element = fiveElements[(seed + index * 3) % fiveElements.length];
+    const yin = value % 2 === 0;
+    const moving = [0, 3, 6, 9, 12, 18, 24].includes(value);
     return {
-      yin: value % 2 === 0,
-      moving: value === 0 || value === 3 || value === 6,
+      yin,
+      moving,
       label: lineLabels[index],
-      role: index === 2 ? "世" : index === 5 ? "应" : ""
+      role: index === 2 ? "世" : index === 5 ? "应" : "",
+      relative,
+      element,
+      strength: clamp(46 + (value % 13) * 4 + (moving ? 15 : 0) + (yin ? -3 : 5), 35, 108)
     };
   });
   const movingCount = lines.filter((line) => line.moving).length;
   const shiLine = lines[2];
   const yingLine = lines[5];
-  const homeBoost = (shiLine.moving ? -0.12 : 0.08) + (shiLine.yin ? -0.04 : 0.06);
-  const awayBoost = (yingLine.moving ? 0.14 : -0.04) + (yingLine.yin ? -0.02 : 0.08);
+  const usefulLine = [...lines].sort((a, b) => {
+    const aUseful = a.relative === "子孙" ? 18 : 0;
+    const bUseful = b.relative === "子孙" ? 18 : 0;
+    return b.strength + bUseful - (a.strength + aUseful);
+  })[0];
+  const officerLine = [...lines].filter((line) => line.relative === "官鬼").sort((a, b) => b.strength - a.strength)[0];
+  const moneyLine = [...lines].filter((line) => line.relative === "妻财").sort((a, b) => b.strength - a.strength)[0];
+  const siblingLine = [...lines].filter((line) => line.relative === "兄弟").sort((a, b) => b.strength - a.strength)[0];
+  const gate = scoreGates[seed % scoreGates.length];
+  const shiYingDelta = shiLine.strength - yingLine.strength;
+  const usefulHome = usefulLine.label === shiLine.label || usefulLine.role === "世" || lines.indexOf(usefulLine) < 3;
+  const usefulAway = usefulLine.label === yingLine.label || usefulLine.role === "应" || lines.indexOf(usefulLine) >= 3;
+  const homeBoost =
+    shiYingDelta / 115 +
+    (shiLine.moving ? (shiLine.relative === "官鬼" ? -0.18 : 0.12) : 0.04) +
+    (usefulHome ? 0.16 : -0.03) +
+    (moneyLine && lines.indexOf(moneyLine) < 3 ? 0.08 : 0);
+  const awayBoost =
+    -shiYingDelta / 115 +
+    (yingLine.moving ? (yingLine.relative === "官鬼" ? -0.14 : 0.14) : 0.02) +
+    (usefulAway ? 0.16 : -0.03) +
+    (moneyLine && lines.indexOf(moneyLine) >= 3 ? 0.08 : 0);
+  const defensiveBrake = (officerLine ? officerLine.strength / 520 : 0.06) + (siblingLine ? siblingLine.strength / 760 : 0);
+  const paceBoost = gate.pace + movingCount * 0.065 + (usefulLine.relative === "子孙" ? usefulLine.strength / 440 : 0) - defensiveBrake;
+  const drawBias = clamp(gate.draw + (Math.abs(shiYingDelta) < 8 ? 0.18 : -0.08) + (siblingLine ? siblingLine.strength / 560 : 0), -0.2, 0.45);
+  const direction =
+    homeBoost > awayBoost + 0.18
+      ? "世爻得气，主队更容易先稳后取势"
+      : awayBoost > homeBoost + 0.18
+        ? "应爻带动，客队更容易抢到结果"
+        : "世应相持，胜负要看中后段变爻";
   return {
     seed,
     lines,
     movingCount,
     baseGua: guaNames[seed % guaNames.length],
     changedGua: guaNames[(seed >>> 5) % guaNames.length],
-    usefulGod: movingCount >= 3 ? "子孙爻旺，主进球机会偏多" : "子孙爻守，进球窗口偏集中",
-    shiYing: homeBoost >= awayBoost ? "世爻较稳，主队不易崩盘" : "应爻发动，客队更容易抢到结果",
+    usefulGod: `${usefulLine.label}${usefulLine.relative}临${usefulLine.element}${usefulLine.moving ? "发动" : "静守"}，${usefulLine.relative === "子孙" ? "主进球机会被打开" : "主比赛节奏受其牵制"}`,
+    shiYing: direction,
+    scoreGate: gate.name,
+    gateTone: gate.tone,
+    shiYingDelta,
+    paceBoost,
+    drawBias,
     homeBoost,
     awayBoost
   };
@@ -321,6 +434,63 @@ function poisson(lambda, k) {
   let factorial = 1;
   for (let i = 2; i <= k; i += 1) factorial *= i;
   return (Math.exp(-lambda) * Math.pow(lambda, k)) / factorial;
+}
+
+function scoreFitByGua(gua, homeGoals, awayGoals, homePower, awayPower) {
+  const total = homeGoals + awayGoals;
+  const diff = homeGoals - awayGoals;
+  const dataEdge = homePower.attack + homePower.experience - awayPower.defense - awayPower.experience;
+  let fit = 1;
+  if (gua.homeBoost > gua.awayBoost + 0.16 && diff > 0) fit += 0.22;
+  if (gua.awayBoost > gua.homeBoost + 0.16 && diff < 0) fit += 0.22;
+  if (Math.abs(gua.homeBoost - gua.awayBoost) < 0.16 && Math.abs(diff) <= 1) fit += 0.12;
+  if (gua.drawBias > 0.2 && diff === 0) fit += gua.drawBias;
+  if (gua.paceBoost > 0.18 && total >= 3) fit += 0.18;
+  if (gua.paceBoost < -0.12 && total <= 2) fit += 0.16;
+  if (gua.movingCount >= 3 && Math.abs(diff) === 1 && total >= 2) fit += 0.12;
+  if (dataEdge > 18 && diff > 0) fit += 0.1;
+  if (dataEdge < -18 && diff < 0) fit += 0.1;
+  return fit;
+}
+
+function omenScoreBias(gua, homeGoals, awayGoals, homePower, awayPower) {
+  const total = homeGoals + awayGoals;
+  const diff = homeGoals - awayGoals;
+  const dataEdge = homePower.attack + homePower.form + homePower.experience - awayPower.attack - awayPower.form - awayPower.experience;
+  const guaEdge = gua.homeBoost - gua.awayBoost;
+  let bias = 0;
+  if (gua.scoreGate === "守中求破") {
+    if (total <= 2 && Math.abs(diff) <= 1) bias += 0.018;
+    if (guaEdge >= 0 && homeGoals === 1 && awayGoals === 0) bias += 0.032;
+    if (guaEdge < 0 && homeGoals === 0 && awayGoals === 1) bias += 0.032;
+    if (Math.abs(dataEdge) > 25 && total === 2 && Math.abs(diff) === 2) bias += 0.018;
+  }
+  if (gua.scoreGate === "子孙发动") {
+    if (total >= 3 && total <= 5) bias += 0.03;
+    if (Math.abs(diff) <= 1 && total >= 3) bias += 0.018;
+    if (guaEdge >= 0 && homeGoals > awayGoals && total >= 3) bias += 0.018;
+    if (guaEdge < 0 && awayGoals > homeGoals && total >= 3) bias += 0.018;
+    if ((homeGoals === 2 && awayGoals === 1) || (homeGoals === 1 && awayGoals === 2) || (homeGoals === 2 && awayGoals === 2)) bias += 0.022;
+  }
+  if (gua.scoreGate === "财旺生攻") {
+    if (dataEdge >= 0 && homeGoals >= 2 && homeGoals > awayGoals) bias += 0.034;
+    if (dataEdge < 0 && awayGoals >= 2 && awayGoals > homeGoals) bias += 0.034;
+    if (total >= 2 && total <= 4) bias += 0.014;
+  }
+  if (gua.scoreGate === "官鬼压身") {
+    if (Math.abs(diff) >= 1 && total <= 3) bias += 0.022;
+    if (dataEdge >= 0 && homeGoals >= 2 && awayGoals <= 1) bias += 0.026;
+    if (dataEdge < 0 && awayGoals >= 2 && homeGoals <= 1) bias += 0.026;
+  }
+  if (gua.scoreGate === "兄弟争持") {
+    if (Math.abs(diff) <= 1 && total <= 3) bias += 0.026;
+    if (homeGoals === 1 && awayGoals === 1) bias += 0.026;
+  }
+  if (gua.scoreGate === "动爻翻局") {
+    if (total >= 3 && Math.abs(diff) <= 1) bias += 0.032;
+    if ((homeGoals === 2 && awayGoals === 1) || (homeGoals === 1 && awayGoals === 2) || (homeGoals === 2 && awayGoals === 2)) bias += 0.024;
+  }
+  return bias;
 }
 
 function calculateForecast() {
@@ -334,16 +504,26 @@ function calculateForecast() {
     data: { liuyao: 0.35, data: 0.65 }
   }[state.dataWeight];
   const contextPace = { group: 0.08, mustwin: 0.22, cautious: -0.18 }[state.context];
-  const homeDataEdge = (home.attack - away.defense) / 34 + (home.experience - away.experience) / 80;
-  const awayDataEdge = (away.attack - home.defense) / 34 + (away.experience - home.experience) / 80;
-  const homeLambda = clamp(1.15 + homeDataEdge * weights.data + gua.homeBoost * weights.liuyao + contextPace, 0.35, 3.8);
-  const awayLambda = clamp(1.1 + awayDataEdge * weights.data + gua.awayBoost * weights.liuyao + contextPace, 0.35, 3.8);
+  const seedNoise = ((hashText(`${match.id}|${state.castTime}|score-qimen`) % 41) - 20) / 160;
+  const homeDataEdge = (home.attack - away.defense) / 22 + (home.form - away.form) / 52 + (home.experience - away.experience) / 54 + (home.setPiece - away.setPiece) / 92;
+  const awayDataEdge = (away.attack - home.defense) / 22 + (away.form - home.form) / 52 + (away.experience - home.experience) / 54 + (away.setPiece - home.setPiece) / 92;
+  const homeQuality = (home.attack + home.setPiece - 142) / 110;
+  const awayQuality = (away.attack + away.setPiece - 142) / 110;
+  const homeLambda = clamp(1.12 + homeQuality + homeDataEdge * weights.data + gua.homeBoost * weights.liuyao * 1.25 + gua.paceBoost + contextPace + seedNoise, 0.2, 5.2);
+  const awayLambda = clamp(1.08 + awayQuality + awayDataEdge * weights.data + gua.awayBoost * weights.liuyao * 1.25 + gua.paceBoost + contextPace - seedNoise / 2, 0.2, 5.2);
+  const targetHome = clamp(Math.round(homeLambda + gua.homeBoost + (home.attack - away.defense) / 95), 0, 5);
+  const targetAway = clamp(Math.round(awayLambda + gua.awayBoost + (away.attack - home.defense) / 95), 0, 5);
   const candidates = [];
-  for (let h = 0; h <= 4; h += 1) {
-    for (let a = 0; a <= 4; a += 1) {
+  for (let h = 0; h <= 5; h += 1) {
+    for (let a = 0; a <= 5; a += 1) {
       const base = poisson(homeLambda, h) * poisson(awayLambda, a);
-      const setPieceBump = Math.abs(h - a) <= 1 ? (home.setPiece + away.setPiece) / 2400 : 0;
-      candidates.push({ home: h, away: a, raw: base + setPieceBump });
+      const setPieceBump = Math.abs(h - a) <= 1 && h + a >= 1 ? (home.setPiece + away.setPiece) / 1900 : 0;
+      const targetFit = h === targetHome && a === targetAway ? 0.34 : h === targetHome || a === targetAway ? 0.12 : 0;
+      const guaFit = scoreFitByGua(gua, h, a, home, away);
+      const omenBias = omenScoreBias(gua, h, a, home, away);
+      const salt = 1 + (((hashText(`${gua.seed}|${h}-${a}|${match.home}|${match.away}`) % 23) - 11) / 150);
+      const extremeBrake = h + a >= 7 ? 0.72 : 1;
+      candidates.push({ home: h, away: a, raw: (base * guaFit + setPieceBump + targetFit * base + omenBias) * salt * extremeBrake });
     }
   }
   candidates.sort((a, b) => b.raw - a.raw);
@@ -483,16 +663,16 @@ function renderScoreInsights(forecast) {
         <div><dt>比分带</dt><dd>${totalGoalBand}</dd></div>
         <div><dt>主推</dt><dd>${top.home}-${top.away}</dd></div>
       </dl>
-      <p>${edgeText}预期进球不是最终比分，而是把球员评分、球队攻防、比赛压力和卦象动爻合并后的进球重心。</p>
+      <p>${edgeText}本场卦门为“${gua.scoreGate}”：${gua.gateTone} 预期进球不是最终比分，而是把球员评分、球队攻防、比赛压力和卦象动爻合并后的进球重心。</p>
     </article>
     <article class="panel data-panel">
       <h3>比分为什么集中在这几组</h3>
-      <p>六爻盘面显示“${gua.shiYing}”，${gua.usefulGod}。当世应差距不大时，模型会把概率集中在 1 球差和小比分平局；当动爻数量增加时，2-1、1-2、2-2 这类变盘比分会被抬高。</p>
+      <p>六爻盘面显示“${gua.shiYing}”，${gua.usefulGod}。本场不是套用固定比分模板，而是先看世应强弱，再看子孙、官鬼、兄弟三类爻对进球、压力和胶着程度的牵引。</p>
       <p>当前 ${homeName} 攻击 ${home.attack} / 防守 ${home.defense}，${awayName} 攻击 ${away.attack} / 防守 ${away.defense}。双方防守和门将评分共同压住极端大比分，所以系统只输出最有内容解释价值的 4 个候选比分。</p>
     </article>
     <article class="panel data-panel">
       <h3>发布口径</h3>
-      <p>如果用于前台内容，可以先写主推比分 ${top.home}-${top.away}，再补充“备选比分覆盖了同一场比赛的两种走势”：一种是世爻稳定、主队守住节奏；另一种是应爻发动、客队在转换或定位球里打出进球。</p>
+      <p>如果用于前台内容，可以先写主推比分 ${top.home}-${top.away}，再补充“备选比分覆盖了同一场比赛的两种走势”：一种来自 ${gua.scoreGate} 的主线，另一种来自动爻变盘和数据边界的修正。</p>
     </article>
   `;
 }
@@ -506,7 +686,7 @@ function renderEvidence(forecast) {
   const historyNode = document.querySelector("#history-analysis");
   if (liuyaoNode) liuyaoNode.innerHTML = `
     <p>本卦为<strong>${gua.baseGua}</strong>，变卦为<strong>${gua.changedGua}</strong>。六爻里，世爻代表 ${homeName}，应爻代表 ${awayName}。当前盘面显示：${gua.shiYing}。</p>
-    <p>${gua.usefulGod}。动爻数量为 ${gua.movingCount}，说明比赛不是单纯低速消耗局，而是存在明确变盘窗口。若应爻发动强于世爻，客队的进球概率会被抬高；若世爻稳定，主队至少有守住基本盘的能力。</p>
+    <p>${gua.usefulGod}。卦门为<strong>${gua.scoreGate}</strong>，${gua.gateTone} 动爻数量为 ${gua.movingCount}，说明比赛不是机械套用小比分，而是要看进球爻、压力爻和世应位置如何共同落到比分区间。</p>
   `;
   if (playerNode) playerNode.innerHTML = `
     <p>${homeName} 攻击 ${home.attack}、防守 ${home.defense}、经验 ${home.experience}；${awayName} 攻击 ${away.attack}、防守 ${away.defense}、经验 ${away.experience}。</p>
@@ -593,7 +773,7 @@ function renderEvidenceDetails(forecast) {
     methodBox.innerHTML = `
       <article class="panel data-panel">
         <h3>六爻与数据如何合流</h3>
-        <p>世爻代表 ${homeName}，应爻代表 ${awayName}。本卦 ${gua.baseGua} 看比赛原始结构，变卦 ${gua.changedGua} 看临场走势。动爻越多，越容易出现阶段性反转、临门一脚失衡或定位球改变比分。</p>
+        <p>世爻代表 ${homeName}，应爻代表 ${awayName}。本卦 ${gua.baseGua} 看比赛原始结构，变卦 ${gua.changedGua} 看临场走势。本场卦门为 ${gua.scoreGate}：${gua.gateTone}</p>
         <p>数据层不直接替代六爻，而是给“能不能进球、能不能守住”定上下限。攻击、创造力和定位球抬高进球期望；防守、门将和大赛经验压低失误概率。最终比分概率就是卦象方向和数据边界的交集。</p>
       </article>
     `;
@@ -608,7 +788,7 @@ function renderReport(forecast) {
   reportBody.innerHTML = `
     <h3>${fixtureTitle(forecast.match)} 六爻比分推演</h3>
     <p>本场主推比分为 <strong>${top.home}-${top.away}</strong>，其余备选比分为：${scoreText}。</p>
-    <p>推演逻辑：六爻盘面以 ${forecast.gua.baseGua} 变 ${forecast.gua.changedGua} 为主线，世应关系显示“${forecast.gua.shiYing}”；球员数据层面，双方攻击、防守、门将与核心球员影响力共同决定预期进球区间；过往赛事经验用于修正大赛稳定性和爆冷风险。</p>
+    <p>推演逻辑：六爻盘面以 ${forecast.gua.baseGua} 变 ${forecast.gua.changedGua} 为主线，卦门落在“${forecast.gua.scoreGate}”，${forecast.gua.gateTone} 世应关系显示“${forecast.gua.shiYing}”；球员数据层面，双方攻击、防守、门将与核心球员影响力共同决定预期进球区间；过往赛事经验用于修正大赛稳定性和爆冷风险。</p>
     <p>内容口径：发布时可以把重点放在“六爻显示的变盘窗口 + 核心球员能否兑现数据优势 + 大赛经验是否压住风险”。这比只说一个比分更容易让读者理解为什么会出现这组概率。</p>
   `;
 }
