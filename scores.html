@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>比分概率 | 六爻球局推演</title>
+    <title>比分推荐率 | 六爻球局推演</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -27,8 +27,8 @@
       <main class="page-main">
         <section class="page-hero" aria-labelledby="scores-title">
           <p class="eyebrow">Score Distribution</p>
-          <h1 id="scores-title">推演比分与概率</h1>
-          <p>这里不仅给出 3-4 个比分，还解释预期进球、比分带和六爻盘面如何共同收敛到这些结果。</p>
+          <h1 id="scores-title">推演比分与推荐率</h1>
+          <p>这里给出 3-4 个比分，并为每个比分单独给出推荐把握度；推荐率不需要相加等于 100%。</p>
         </section>
 
         <section class="panel compact-control" aria-label="比分参数">
@@ -47,8 +47,11 @@
               比赛场景
               <select id="match-context">
                 <option value="group" selected>小组赛常规压力</option>
+                <option value="drawChase">上轮踢平，需要抢胜</option>
+                <option value="lossNeedPoint">上轮输球，急需拿分</option>
                 <option value="mustwin">必须抢分</option>
-                <option value="cautious">双方谨慎</option>
+                <option value="goalDifference">需要净胜球</option>
+                <option value="cautious">双方谨慎，先保不败</option>
               </select>
             </label>
             <div class="button-row"><button type="submit">重新计算比分</button></div>
@@ -60,10 +63,19 @@
         </section>
 
         <section id="score-insights" class="insight-grid section-block" aria-label="比分分析"></section>
+
+        <section class="section-block">
+          <div class="section-title">
+            <p class="eyebrow">Scenario Layer</p>
+            <h2>不同比赛场景推演</h2>
+            <p>同一场比赛在不同积分压力下，六爻会把进攻风险、平局价值和净胜球需求重新纳入盘面。</p>
+          </div>
+          <div id="scenario-readings" class="insight-grid"></div>
+        </section>
       </main>
 
       <footer class="site-footer">
-        <p>概率是内容推演概率，不是投注胜率。正式发布前仍需要复核首发、伤停和临场新闻。</p>
+        <p>推荐率是内容推演把握度，不是投注胜率。正式发布前仍需要复核首发、伤停和临场新闻。</p>
       </footer>
     </div>
 

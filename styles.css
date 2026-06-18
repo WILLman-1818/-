@@ -561,6 +561,10 @@ select {
   line-height: 1.85;
 }
 
+.scenario-card.active-scenario {
+  outline: 2px solid var(--gold);
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -649,6 +653,15 @@ select {
   margin: 8px 0 16px;
   color: rgba(24, 18, 13, 0.68);
   line-height: 1.6;
+}
+
+.score-card em {
+  display: block;
+  margin: -6px 0 14px;
+  color: rgba(24, 18, 13, 0.58);
+  font-size: 13px;
+  font-style: normal;
+  line-height: 1.65;
 }
 
 .score-card-muted {

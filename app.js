@@ -39,6 +39,62 @@ const forecastModes = {
   liuyao: { name: "偏六爻断法", data: 0.18, gua: 0.68, history: 0.14, risk: 1.1 },
   data: { name: "偏数据断法", data: 0.68, gua: 0.18, history: 0.14, risk: 0.84 }
 };
+const scenarioProfiles = {
+  group: {
+    name: "小组赛常规压力",
+    tone: "双方还保留调整空间，先看基本盘强弱和卦象主线。",
+    pace: 0.06,
+    draw: 0.04,
+    highGoal: 0.02,
+    winNeed: 0.02,
+    underdogPoint: 0.02
+  },
+  drawChase: {
+    name: "上轮踢平，需要抢胜",
+    tone: "上一场只拿 1 分，平局价值下降，进攻端会更早压上寻找三分。",
+    pace: 0.2,
+    draw: -0.14,
+    highGoal: 0.16,
+    winNeed: 0.18,
+    underdogPoint: -0.02
+  },
+  lossNeedPoint: {
+    name: "上轮输球，急需拿分",
+    tone: "上一场失利后不能再空手，先求不败，再利用转换或定位球偷分。",
+    pace: 0.12,
+    draw: 0.12,
+    highGoal: 0.08,
+    winNeed: 0.06,
+    underdogPoint: 0.14
+  },
+  mustwin: {
+    name: "必须抢分",
+    tone: "积分压力已经压到临界点，平局不够用，比赛会更主动冒险。",
+    pace: 0.28,
+    draw: -0.18,
+    highGoal: 0.2,
+    winNeed: 0.22,
+    underdogPoint: 0
+  },
+  goalDifference: {
+    name: "需要净胜球",
+    tone: "不只要赢，还要争净胜球，领先后仍可能继续加压。",
+    pace: 0.34,
+    draw: -0.26,
+    highGoal: 0.26,
+    winNeed: 0.24,
+    underdogPoint: -0.08
+  },
+  cautious: {
+    name: "双方谨慎，先保不败",
+    tone: "双方都不想先犯错，防守秩序和中场消耗会压低比分上限。",
+    pace: -0.2,
+    draw: 0.2,
+    highGoal: -0.14,
+    winNeed: -0.08,
+    underdogPoint: 0.08
+  }
+};
 
 const storedMatchId = window.localStorage?.getItem("liuyao-selected-match");
 const storedCastTime = window.localStorage?.getItem("liuyao-cast-time");
@@ -540,6 +596,44 @@ function historicalScoreBias(gua, homeGoals, awayGoals, homePower, awayPower) {
   return Math.max(0, bias);
 }
 
+function scenarioProfile(context = state.context) {
+  return scenarioProfiles[context] || scenarioProfiles.group;
+}
+
+function scenarioScoreBias(scenario, homeGoals, awayGoals, homePower, awayPower) {
+  const total = homeGoals + awayGoals;
+  const diff = homeGoals - awayGoals;
+  const dataEdge = homePower.attack + homePower.form + homePower.experience - awayPower.attack - awayPower.form - awayPower.experience;
+  let bias = 0;
+  if (diff === 0) bias += scenario.draw * 0.16;
+  if (total >= 3) bias += scenario.highGoal * 0.16;
+  if (diff !== 0) bias += scenario.winNeed * 0.12;
+  if (scenario.name.includes("踢平")) {
+    if (total >= 3 && Math.abs(diff) <= 1) bias += 0.024;
+    if (diff !== 0 && total >= 2) bias += 0.02;
+    if (homeGoals === 0 && awayGoals === 0) bias -= 0.05;
+  }
+  if (scenario.name.includes("输球")) {
+    if (diff === 0 && total >= 2) bias += 0.034;
+    if (Math.abs(diff) === 1 && total >= 2) bias += 0.02;
+    if (dataEdge > 18 && awayGoals >= 1) bias += 0.012;
+    if (dataEdge < -18 && homeGoals >= 1) bias += 0.012;
+  }
+  if (scenario.name.includes("净胜球")) {
+    if (Math.abs(diff) >= 2 && total >= 2) bias += 0.082;
+    if (Math.abs(diff) === 1) bias -= 0.028;
+    if (dataEdge > 22 && diff >= 2) bias += 0.052;
+    if (dataEdge < -22 && diff <= -2) bias += 0.052;
+    if ((homeGoals === 3 && awayGoals <= 1) || (awayGoals === 3 && homeGoals <= 1)) bias += 0.028;
+    if (diff === 0) bias -= 0.06;
+  }
+  if (scenario.name.includes("谨慎")) {
+    if (total <= 2 && Math.abs(diff) <= 1) bias += 0.03;
+    if (total >= 4) bias -= 0.05;
+  }
+  return bias;
+}
+
 function directionFit(gua, homeGoals, awayGoals) {
   const diff = homeGoals - awayGoals;
   const guaEdge = gua.homeBoost - gua.awayBoost;
@@ -563,30 +657,31 @@ function dataScoreFit(homeGoals, awayGoals, homeLambda, awayLambda, homePower, a
   return closeness * 0.34 + edgeFit;
 }
 
-function modeScore(candidate, mode, gua, homeLambda, awayLambda, homePower, awayPower) {
+function modeScore(candidate, mode, gua, scenario, homeLambda, awayLambda, homePower, awayPower) {
   const scoreKey = `${candidate.home}-${candidate.away}`;
   const anchorFit = (gateAnchors[gua.scoreGate] || []).includes(scoreKey) ? 0.18 : 0;
   const guaScore = candidate.guaFit * 0.23 + candidate.omenBias * 3.4 + directionFit(gua, candidate.home, candidate.away) + anchorFit;
   const dataScore = candidate.base * 3.8 + dataScoreFit(candidate.home, candidate.away, homeLambda, awayLambda, homePower, awayPower);
   const historyScore = candidate.historyBias * 4.2;
-  const volatility = candidate.home + candidate.away >= 3 ? 0.04 * mode.risk : 0;
+  const volatility = candidate.home + candidate.away >= 3 ? (0.04 + Math.max(0, scenario.highGoal) * 0.08) * mode.risk : 0;
   const lowScoreBrake = candidate.home + candidate.away <= 1 && gua.paceBoost > 0.12 ? -0.12 : 0;
-  return Math.max(0.0001, mode.gua * guaScore + mode.data * dataScore + mode.history * historyScore + volatility + lowScoreBrake + candidate.salt * 0.015);
+  return Math.max(0.0001, mode.gua * guaScore + mode.data * dataScore + mode.history * historyScore + candidate.scenarioBias * 2.8 + volatility + lowScoreBrake + candidate.salt * 0.015);
 }
 
-function recommendationRate(candidate, index, topScore, mode, gua, homeLambda, awayLambda, homePower, awayPower) {
+function recommendationRate(candidate, index, topScore, mode, gua, scenario, homeLambda, awayLambda, homePower, awayPower) {
   const relative = Math.pow(candidate.modeRaw / topScore, 0.72);
   const scoreKey = `${candidate.home}-${candidate.away}`;
   const anchor = (gateAnchors[gua.scoreGate] || []).includes(scoreKey) ? 9 : 0;
   const direction = directionFit(gua, candidate.home, candidate.away) > 0.1 ? 8 : 0;
   const dataFit = dataScoreFit(candidate.home, candidate.away, homeLambda, awayLambda, homePower, awayPower) > 0.25 ? 7 : 0;
+  const scenarioFit = candidate.scenarioBias > 0.025 ? 8 : candidate.scenarioBias > 0.01 ? 4 : 0;
   const movingCertainty = Math.min(12, gua.movingCount * 3);
   const modeCertainty = mode.name === "偏六爻断法" ? Math.abs(gua.homeBoost - gua.awayBoost) * 16 : mode.name === "偏数据断法" ? Math.abs(homeLambda - awayLambda) * 6 : 6;
   const rankPenalty = index * 10;
-  return clamp(Math.round(42 + relative * 34 + anchor + direction + dataFit + movingCertainty + modeCertainty - rankPenalty), 32, 99);
+  return clamp(Math.round(42 + relative * 34 + anchor + direction + dataFit + scenarioFit + movingCertainty + modeCertainty - rankPenalty), 32, 99);
 }
 
-function scoreRationale(candidate, mode, gua, homeLambda, awayLambda) {
+function scoreRationale(candidate, mode, gua, scenario, homeLambda, awayLambda) {
   const scoreKey = `${candidate.home}-${candidate.away}`;
   const total = candidate.home + candidate.away;
   const diff = candidate.home - candidate.away;
@@ -604,25 +699,27 @@ function scoreRationale(candidate, mode, gua, homeLambda, awayLambda) {
       : mode.name === "偏数据断法"
         ? `数据权重较高，贴近 ${homeLambda.toFixed(1)}-${awayLambda.toFixed(1)} 的进球期望`
         : "综合六爻、数据和历史比分形态";
-  return `${anchorHit ? "命中卦门锚点；" : ""}${directionText}；${goalText}；${modeText}。`;
+  const scenarioText = candidate.scenarioBias > 0.02 ? `比赛场景吻合“${scenario.name}”的积分压力` : `比赛场景按“${scenario.name}”修正`;
+  return `${anchorHit ? "命中卦门锚点；" : ""}${directionText}；${goalText}；${modeText}；${scenarioText}。`;
 }
 
-function calculateForecast() {
+function calculateForecast(contextOverride = state.context) {
   const match = state.match;
   const home = teamPower(match.home);
   const away = teamPower(match.away);
   const gua = castHexagram(match, state.castTime);
   const mode = forecastModes[state.dataWeight] || forecastModes.balanced;
+  const scenario = scenarioProfile(contextOverride);
   const weights = { liuyao: mode.gua, data: mode.data };
-  const contextPace = { group: 0.08, mustwin: 0.22, cautious: -0.18 }[state.context];
+  const contextPace = scenario.pace;
   const recentGoalLift = finishedGoalBaseline();
   const seedNoise = ((hashText(`${match.id}|${state.castTime}|score-qimen`) % 41) - 20) / 160;
   const homeDataEdge = (home.attack - away.defense) / 22 + (home.form - away.form) / 52 + (home.experience - away.experience) / 54 + (home.setPiece - away.setPiece) / 92;
   const awayDataEdge = (away.attack - home.defense) / 22 + (away.form - home.form) / 52 + (away.experience - home.experience) / 54 + (away.setPiece - home.setPiece) / 92;
   const homeQuality = (home.attack + home.setPiece - 142) / 110;
   const awayQuality = (away.attack + away.setPiece - 142) / 110;
-  const homeLambda = clamp(1.28 + homeQuality + homeDataEdge * weights.data + gua.homeBoost * weights.liuyao * 1.32 + gua.paceBoost + contextPace + recentGoalLift + seedNoise, 0.2, 5.4);
-  const awayLambda = clamp(1.22 + awayQuality + awayDataEdge * weights.data + gua.awayBoost * weights.liuyao * 1.32 + gua.paceBoost + contextPace + recentGoalLift - seedNoise / 2, 0.2, 5.4);
+  const homeLambda = clamp(1.28 + homeQuality + homeDataEdge * weights.data + gua.homeBoost * weights.liuyao * 1.32 + gua.paceBoost + contextPace + scenario.highGoal * 0.2 + recentGoalLift + seedNoise, 0.2, 5.4);
+  const awayLambda = clamp(1.22 + awayQuality + awayDataEdge * weights.data + gua.awayBoost * weights.liuyao * 1.32 + gua.paceBoost + contextPace + scenario.highGoal * 0.2 + recentGoalLift - seedNoise / 2, 0.2, 5.4);
   const targetHome = clamp(Math.round(homeLambda + gua.homeBoost + (home.attack - away.defense) / 95), 0, 5);
   const targetAway = clamp(Math.round(awayLambda + gua.awayBoost + (away.attack - home.defense) / 95), 0, 5);
   const candidates = [];
@@ -634,24 +731,25 @@ function calculateForecast() {
       const guaFit = scoreFitByGua(gua, h, a, home, away);
       const omenBias = omenScoreBias(gua, h, a, home, away);
       const historyBias = historicalScoreBias(gua, h, a, home, away);
+      const scenarioBias = scenarioScoreBias(scenario, h, a, home, away);
       const salt = 1 + (((hashText(`${gua.seed}|${h}-${a}|${match.home}|${match.away}`) % 29) - 14) / 120);
       const extremeBrake = h + a >= 7 ? 0.72 : 1;
-      const raw = (base * guaFit + setPieceBump + targetFit * base + omenBias + historyBias) * salt * extremeBrake;
-      candidates.push({ home: h, away: a, base, guaFit, omenBias, historyBias, setPieceBump, targetFit, salt, raw });
+      const raw = (base * guaFit + setPieceBump + targetFit * base + omenBias + historyBias + scenarioBias) * salt * extremeBrake;
+      candidates.push({ home: h, away: a, base, guaFit, omenBias, historyBias, scenarioBias, setPieceBump, targetFit, salt, raw });
     }
   }
   candidates.forEach((candidate) => {
-    candidate.modeRaw = modeScore(candidate, mode, gua, homeLambda, awayLambda, home, away);
+    candidate.modeRaw = modeScore(candidate, mode, gua, scenario, homeLambda, awayLambda, home, away);
   });
   candidates.sort((a, b) => b.modeRaw - a.modeRaw);
   const top = candidates.slice(0, 4);
   const topScore = top[0]?.modeRaw || 1;
   const scores = top.map((item) => ({
     ...item,
-    probability: recommendationRate(item, top.indexOf(item), topScore, mode, gua, homeLambda, awayLambda, home, away),
-    rationale: scoreRationale(item, mode, gua, homeLambda, awayLambda)
+    probability: recommendationRate(item, top.indexOf(item), topScore, mode, gua, scenario, homeLambda, awayLambda, home, away),
+    rationale: scoreRationale(item, mode, gua, scenario, homeLambda, awayLambda)
   }));
-  return { match, home, away, gua, homeLambda, awayLambda, scores, recommendationMode: mode.name, recentGoalLift };
+  return { match, home, away, gua, homeLambda, awayLambda, scores, recommendationMode: mode.name, scenario, recentGoalLift };
 }
 
 function populateMatchSelect(select) {
@@ -760,7 +858,7 @@ function renderScores(forecast) {
 function renderScoreInsights(forecast) {
   const box = document.querySelector("#score-insights");
   if (!box) return;
-  const { match, home, away, gua, homeLambda, awayLambda, scores, recommendationMode, recentGoalLift } = forecast;
+  const { match, home, away, gua, scenario, homeLambda, awayLambda, scores, recommendationMode, recentGoalLift } = forecast;
   const homeName = displayTeam(match.home);
   const awayName = displayTeam(match.away);
   const top = scores[0];
@@ -780,7 +878,7 @@ function renderScoreInsights(forecast) {
         <div><dt>比分带</dt><dd>${totalGoalBand}</dd></div>
         <div><dt>${recommendationMode}</dt><dd>${top.home}-${top.away}</dd></div>
       </dl>
-      <p>${edgeText}本场卦门为“${gua.scoreGate}”：${gua.gateTone} 预期进球不是最终比分，而是把球员评分、球队攻防、比赛压力、往届比分基线、已完赛进球均值和卦象动爻合并后的进球重心。</p>
+      <p>${edgeText}本场卦门为“${gua.scoreGate}”：${gua.gateTone} 当前场景为“${scenario.name}”，${scenario.tone} 预期进球不是最终比分，而是把球员评分、球队攻防、比赛压力、往届比分基线、已完赛进球均值和卦象动爻合并后的进球重心。</p>
     </article>
     <article class="panel data-panel">
       <h3>比分为什么集中在这几组</h3>
@@ -789,13 +887,37 @@ function renderScoreInsights(forecast) {
     </article>
     <article class="panel data-panel">
       <h3>发布口径</h3>
-      <p>如果用于前台内容，可以先写主推比分 ${top.home}-${top.away}，再补充“备选比分覆盖了同一场比赛的两种走势”：一种来自 ${gua.scoreGate} 的主线，另一种来自动爻变盘和数据边界的修正。</p>
+      <p>如果用于前台内容，可以先写主推比分 ${top.home}-${top.away}，再补充“备选比分覆盖了同一场比赛的两种走势”：一种来自 ${gua.scoreGate} 的主线，另一种来自“${scenario.name}”带来的积分压力修正。</p>
     </article>
   `;
 }
 
+function renderScenarioReadings() {
+  const box = document.querySelector("#scenario-readings");
+  if (!box) return;
+  box.innerHTML = Object.keys(scenarioProfiles)
+    .map((scenarioKey) => {
+      const scenarioForecast = calculateForecast(scenarioKey);
+      const scenario = scenarioForecast.scenario;
+      const top = scenarioForecast.scores[0];
+      const active = scenarioKey === state.context ? " active-scenario" : "";
+      return `
+        <article class="panel data-panel scenario-card${active}">
+          <h3>${scenario.name}</h3>
+          <dl class="metric-grid">
+            <div><dt>主推比分</dt><dd>${top.home}-${top.away}</dd></div>
+            <div><dt>推荐率</dt><dd>${top.probability}%</dd></div>
+          </dl>
+          <p>${scenario.tone}</p>
+          <p>${top.rationale}</p>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function renderEvidence(forecast) {
-  const { match, home, away, gua } = forecast;
+  const { match, home, away, gua, scenario } = forecast;
   const homeName = displayTeam(match.home);
   const awayName = displayTeam(match.away);
   const liuyaoNode = document.querySelector("#liuyao-analysis");
@@ -803,7 +925,7 @@ function renderEvidence(forecast) {
   const historyNode = document.querySelector("#history-analysis");
   if (liuyaoNode) liuyaoNode.innerHTML = `
     <p>本卦为<strong>${gua.baseGua}</strong>，变卦为<strong>${gua.changedGua}</strong>。六爻里，世爻代表 ${homeName}，应爻代表 ${awayName}。当前盘面显示：${gua.shiYing}。</p>
-    <p>${gua.usefulGod}。卦门为<strong>${gua.scoreGate}</strong>，${gua.gateTone} 动爻数量为 ${gua.movingCount}，说明比赛不是机械套用小比分，而是要看进球爻、压力爻和世应位置如何共同落到比分区间。</p>
+    <p>${gua.usefulGod}。卦门为<strong>${gua.scoreGate}</strong>，${gua.gateTone} 当前比赛场景为<strong>${scenario.name}</strong>，${scenario.tone} 动爻数量为 ${gua.movingCount}，说明比赛不是机械套用小比分，而是要看进球爻、压力爻、积分压力和世应位置如何共同落到比分区间。</p>
   `;
   if (playerNode) playerNode.innerHTML = `
     <p>${homeName} 攻击 ${home.attack}、防守 ${home.defense}、经验 ${home.experience}；${awayName} 攻击 ${away.attack}、防守 ${away.defense}、经验 ${away.experience}。</p>
@@ -828,7 +950,7 @@ function renderEvidenceDetails(forecast) {
   const playerBox = document.querySelector("#player-data");
   const methodBox = document.querySelector("#method-data");
   if (!teamBox && !playerBox && !methodBox) return;
-  const { match, home, away, gua } = forecast;
+  const { match, home, away, gua, scenario } = forecast;
   const homeProfile = teams[match.home];
   const awayProfile = teams[match.away];
   const homeName = displayTeam(match.home);
@@ -891,7 +1013,7 @@ function renderEvidenceDetails(forecast) {
       <article class="panel data-panel">
         <h3>六爻与数据如何合流</h3>
         <p>世爻代表 ${homeName}，应爻代表 ${awayName}。本卦 ${gua.baseGua} 看比赛原始结构，变卦 ${gua.changedGua} 看临场走势。本场卦门为 ${gua.scoreGate}：${gua.gateTone}</p>
-        <p>数据层不直接替代六爻，而是给“能不能进球、能不能守住”定上下限。攻击、创造力和定位球抬高进球期望；防守、门将和大赛经验压低失误风险。最终推荐率就是卦象方向、球队数据和历史比分形态的交集。</p>
+        <p>数据层不直接替代六爻，而是给“能不能进球、能不能守住”定上下限。攻击、创造力和定位球抬高进球期望；防守、门将和大赛经验压低失误风险。当前场景“${scenario.name}”会修正平局价值、冒险程度和净胜球需求，最终推荐率就是卦象方向、球队数据、历史比分形态和积分压力的交集。</p>
       </article>
     `;
   }
@@ -905,7 +1027,7 @@ function renderReport(forecast) {
   reportBody.innerHTML = `
     <h3>${fixtureTitle(forecast.match)} 六爻比分推演</h3>
     <p>本场主推比分为 <strong>${top.home}-${top.away}</strong>，其余备选比分为：${scoreText}。</p>
-    <p>推演逻辑：当前采用<strong>${forecast.recommendationMode}</strong>，六爻盘面以 ${forecast.gua.baseGua} 变 ${forecast.gua.changedGua} 为主线，卦门落在“${forecast.gua.scoreGate}”，${forecast.gua.gateTone} 世应关系显示“${forecast.gua.shiYing}”；球员数据层面，双方攻击、防守、门将与核心球员影响力共同决定预期进球区间；过往赛事经验用于修正大赛稳定性和爆冷风险。</p>
+    <p>推演逻辑：当前采用<strong>${forecast.recommendationMode}</strong>，比赛场景为<strong>${forecast.scenario.name}</strong>，${forecast.scenario.tone} 六爻盘面以 ${forecast.gua.baseGua} 变 ${forecast.gua.changedGua} 为主线，卦门落在“${forecast.gua.scoreGate}”，${forecast.gua.gateTone} 世应关系显示“${forecast.gua.shiYing}”；球员数据层面，双方攻击、防守、门将与核心球员影响力共同决定预期进球区间；过往赛事经验用于修正大赛稳定性和爆冷风险。</p>
     <p>内容口径：发布时可以把重点放在“六爻显示的变盘窗口 + 核心球员能否兑现数据优势 + 大赛经验是否压住风险”。推荐率是单个比分的把握度，不是四个比分平分 100%。</p>
   `;
 }
@@ -919,6 +1041,7 @@ function renderAll() {
   renderHexagram(forecast.gua);
   renderScores(forecast);
   renderScoreInsights(forecast);
+  renderScenarioReadings();
   renderEvidence(forecast);
   renderEvidenceDetails(forecast);
   renderReport(forecast);
