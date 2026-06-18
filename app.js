@@ -5,11 +5,16 @@ let bracketTree = window.WORLD_CUP_BRACKET || { rounds: [] };
 const guaNames = ["乾为天", "坤为地", "水雷屯", "山水蒙", "水火既济", "雷火丰", "风雷益", "泽火革", "山泽损", "火地晋"];
 const lineLabels = ["初爻", "二爻", "三爻", "四爻", "五爻", "上爻"];
 
+const storedMatchId = window.localStorage?.getItem("liuyao-selected-match");
+const storedCastTime = window.localStorage?.getItem("liuyao-cast-time");
+const storedDataWeight = window.localStorage?.getItem("liuyao-data-weight");
+const storedContext = window.localStorage?.getItem("liuyao-context");
+
 let state = {
-  match: matches[0],
-  castTime: "2026-06-18T01:00",
-  dataWeight: "balanced",
-  context: "group"
+  match: matches.find((match) => match.id === storedMatchId) || matches[0],
+  castTime: storedCastTime || "2026-06-18T01:00",
+  dataWeight: storedDataWeight || "balanced",
+  context: storedContext || "group"
 };
 
 const teamNameMap = {
@@ -125,6 +130,14 @@ function updateLiveStatus(source, updatedAt) {
   if (syncNode) syncNode.textContent = updatedAt === "等待接口接入" ? updatedAt : new Date(updatedAt).toLocaleString("zh-CN");
 }
 
+function persistState() {
+  if (!state.match) return;
+  window.localStorage?.setItem("liuyao-selected-match", state.match.id);
+  window.localStorage?.setItem("liuyao-cast-time", state.castTime);
+  window.localStorage?.setItem("liuyao-data-weight", state.dataWeight);
+  window.localStorage?.setItem("liuyao-context", state.context);
+}
+
 function mergeLiveMatches(liveMatches) {
   liveMatches.forEach((liveMatch) => {
     const localMatch = matches.find((match) => match.id === liveMatch.id);
@@ -231,6 +244,16 @@ function statusLabel(match) {
   return match.context || "未开赛，赛前数据持续更新";
 }
 
+function selectMatch(match, nextPage) {
+  state.match = match;
+  persistState();
+  if (nextPage) {
+    window.location.href = nextPage;
+    return;
+  }
+  renderAll();
+}
+
 function hashText(text) {
   let hash = 2166136261;
   for (let i = 0; i < text.length; i += 1) {
@@ -335,12 +358,25 @@ function calculateForecast() {
   return { match, home, away, gua, homeLambda, awayLambda, scores };
 }
 
+function populateMatchSelect(select) {
+  if (!select) return;
+  select.innerHTML = "";
+  getSortedMatches().forEach((match) => {
+    const option = document.createElement("option");
+    option.value = match.id;
+    option.textContent = fixtureTitle(match);
+    if (state.match && match.id === state.match.id) option.selected = true;
+    select.appendChild(option);
+  });
+}
+
 function renderMatches() {
   const list = document.querySelector("#match-list");
   const select = document.querySelector("#match-select");
   const sortedMatches = getSortedMatches();
+  populateMatchSelect(select);
+  if (!list) return;
   list.innerHTML = "";
-  select.innerHTML = "";
   sortedMatches.forEach((match) => {
     const card = document.createElement("article");
     card.className = `match-card${match.id === state.match.id ? " active" : ""}`;
@@ -349,19 +385,12 @@ function renderMatches() {
       <strong>${fixtureTitle(match)}</strong>
       <span>${displayVenue(match.venue)}</span>
       <b>${statusLabel(match)}</b>
+      <small>点击进入起卦推演</small>
     `;
     card.addEventListener("click", () => {
-      state.match = match;
-      renderAll();
-      document.querySelector("#reading").scrollIntoView({ behavior: "smooth" });
+      selectMatch(match, "./reading.html");
     });
     list.appendChild(card);
-
-    const option = document.createElement("option");
-    option.value = match.id;
-    option.textContent = fixtureTitle(match);
-    if (match.id === state.match.id) option.selected = true;
-    select.appendChild(option);
   });
 }
 
@@ -396,21 +425,26 @@ function renderBracket() {
 function renderHexagram(gua) {
   const hero = document.querySelector("#hero-hexagram");
   const box = document.querySelector("#hexagram-lines");
+  const baseNode = document.querySelector("#base-gua");
+  const changedNode = document.querySelector("#changed-gua");
+  const shiYingNode = document.querySelector("#shi-ying");
+  const usefulGodNode = document.querySelector("#useful-god");
   const html = gua.lines
     .slice()
     .reverse()
     .map((line) => `<div class="hex-line ${line.yin ? "broken" : "solid"} ${line.moving ? "moving" : ""}" title="${line.label}${line.role ? " · " + line.role : ""}"></div>`)
     .join("");
-  hero.innerHTML = html;
-  box.innerHTML = html;
-  document.querySelector("#base-gua").textContent = gua.baseGua;
-  document.querySelector("#changed-gua").textContent = gua.changedGua;
-  document.querySelector("#shi-ying").textContent = gua.shiYing;
-  document.querySelector("#useful-god").textContent = gua.usefulGod;
+  if (hero) hero.innerHTML = html;
+  if (box) box.innerHTML = html;
+  if (baseNode) baseNode.textContent = gua.baseGua;
+  if (changedNode) changedNode.textContent = gua.changedGua;
+  if (shiYingNode) shiYingNode.textContent = gua.shiYing;
+  if (usefulGodNode) usefulGodNode.textContent = gua.usefulGod;
 }
 
 function renderScores(forecast) {
   const list = document.querySelector("#score-list");
+  if (!list) return;
   list.innerHTML = forecast.scores
     .map((score, index) => {
       const label = index === 0 ? "主推比分" : `备选比分 ${index}`;
@@ -426,15 +460,55 @@ function renderScores(forecast) {
     .join("");
 }
 
+function renderScoreInsights(forecast) {
+  const box = document.querySelector("#score-insights");
+  if (!box) return;
+  const { match, home, away, gua, homeLambda, awayLambda, scores } = forecast;
+  const homeName = displayTeam(match.home);
+  const awayName = displayTeam(match.away);
+  const top = scores[0];
+  const totalGoalBand = top.home + top.away <= 2 ? "低到中比分区间" : "中高比分区间";
+  const edgeText =
+    homeLambda > awayLambda + 0.18
+      ? `${homeName} 的预期进球略高，主队方向更稳。`
+      : awayLambda > homeLambda + 0.18
+        ? `${awayName} 的预期进球略高，客队存在抢结果能力。`
+        : "双方预期进球接近，平局和一球差比分权重更高。";
+  box.innerHTML = `
+    <article class="panel data-panel">
+      <h3>进球期望</h3>
+      <dl class="metric-grid">
+        <div><dt>${homeName}</dt><dd>${homeLambda.toFixed(2)}</dd></div>
+        <div><dt>${awayName}</dt><dd>${awayLambda.toFixed(2)}</dd></div>
+        <div><dt>比分带</dt><dd>${totalGoalBand}</dd></div>
+        <div><dt>主推</dt><dd>${top.home}-${top.away}</dd></div>
+      </dl>
+      <p>${edgeText}预期进球不是最终比分，而是把球员评分、球队攻防、比赛压力和卦象动爻合并后的进球重心。</p>
+    </article>
+    <article class="panel data-panel">
+      <h3>比分为什么集中在这几组</h3>
+      <p>六爻盘面显示“${gua.shiYing}”，${gua.usefulGod}。当世应差距不大时，模型会把概率集中在 1 球差和小比分平局；当动爻数量增加时，2-1、1-2、2-2 这类变盘比分会被抬高。</p>
+      <p>当前 ${homeName} 攻击 ${home.attack} / 防守 ${home.defense}，${awayName} 攻击 ${away.attack} / 防守 ${away.defense}。双方防守和门将评分共同压住极端大比分，所以系统只输出最有内容解释价值的 4 个候选比分。</p>
+    </article>
+    <article class="panel data-panel">
+      <h3>发布口径</h3>
+      <p>如果用于前台内容，可以先写主推比分 ${top.home}-${top.away}，再补充“备选比分覆盖了同一场比赛的两种走势”：一种是世爻稳定、主队守住节奏；另一种是应爻发动、客队在转换或定位球里打出进球。</p>
+    </article>
+  `;
+}
+
 function renderEvidence(forecast) {
   const { match, home, away, gua } = forecast;
   const homeName = displayTeam(match.home);
   const awayName = displayTeam(match.away);
-  document.querySelector("#liuyao-analysis").innerHTML = `
+  const liuyaoNode = document.querySelector("#liuyao-analysis");
+  const playerNode = document.querySelector("#player-analysis");
+  const historyNode = document.querySelector("#history-analysis");
+  if (liuyaoNode) liuyaoNode.innerHTML = `
     <p>本卦为<strong>${gua.baseGua}</strong>，变卦为<strong>${gua.changedGua}</strong>。六爻里，世爻代表 ${homeName}，应爻代表 ${awayName}。当前盘面显示：${gua.shiYing}。</p>
     <p>${gua.usefulGod}。动爻数量为 ${gua.movingCount}，说明比赛不是单纯低速消耗局，而是存在明确变盘窗口。若应爻发动强于世爻，客队的进球概率会被抬高；若世爻稳定，主队至少有守住基本盘的能力。</p>
   `;
-  document.querySelector("#player-analysis").innerHTML = `
+  if (playerNode) playerNode.innerHTML = `
     <p>${homeName} 攻击 ${home.attack}、防守 ${home.defense}、经验 ${home.experience}；${awayName} 攻击 ${away.attack}、防守 ${away.defense}、经验 ${away.experience}。</p>
     <div class="player-table">
       ${[
@@ -445,17 +519,93 @@ function renderEvidence(forecast) {
         .join("")}
     </div>
   `;
-  document.querySelector("#history-analysis").innerHTML = `
+  if (historyNode) historyNode.innerHTML = `
     <p>${homeName}：${teams[match.home].recentExperience}</p>
     <p>${awayName}：${teams[match.away].recentExperience}</p>
     <p>过往经验层不是直接决定比分，而是修正六爻与球员数据的极端值：大赛经验高的球队更容易守住比分，经验少但冲击力强的球队更容易制造单点爆冷。</p>
   `;
 }
 
+function renderEvidenceDetails(forecast) {
+  const teamBox = document.querySelector("#team-data");
+  const playerBox = document.querySelector("#player-data");
+  const methodBox = document.querySelector("#method-data");
+  if (!teamBox && !playerBox && !methodBox) return;
+  const { match, home, away, gua } = forecast;
+  const homeProfile = teams[match.home];
+  const awayProfile = teams[match.away];
+  const homeName = displayTeam(match.home);
+  const awayName = displayTeam(match.away);
+  if (teamBox) {
+    teamBox.innerHTML = `
+      <article class="panel data-panel">
+        <h3>${homeName} 球队底盘</h3>
+        <dl class="metric-grid">
+          <div><dt>综合近况</dt><dd>${homeProfile.teamForm}</dd></div>
+          <div><dt>攻击</dt><dd>${homeProfile.attack}</dd></div>
+          <div><dt>防守</dt><dd>${homeProfile.defense}</dd></div>
+          <div><dt>门将</dt><dd>${homeProfile.goalkeeper}</dd></div>
+          <div><dt>定位球</dt><dd>${homeProfile.setPiece}</dd></div>
+          <div><dt>大赛经验</dt><dd>${homeProfile.tournamentExperience}</dd></div>
+        </dl>
+        <p>${homeProfile.recentExperience}</p>
+      </article>
+      <article class="panel data-panel">
+        <h3>${awayName} 球队底盘</h3>
+        <dl class="metric-grid">
+          <div><dt>综合近况</dt><dd>${awayProfile.teamForm}</dd></div>
+          <div><dt>攻击</dt><dd>${awayProfile.attack}</dd></div>
+          <div><dt>防守</dt><dd>${awayProfile.defense}</dd></div>
+          <div><dt>门将</dt><dd>${awayProfile.goalkeeper}</dd></div>
+          <div><dt>定位球</dt><dd>${awayProfile.setPiece}</dd></div>
+          <div><dt>大赛经验</dt><dd>${awayProfile.tournamentExperience}</dd></div>
+        </dl>
+        <p>${awayProfile.recentExperience}</p>
+      </article>
+    `;
+  }
+  if (playerBox) {
+    playerBox.innerHTML = [match.home, match.away]
+      .map((teamName) => {
+        const profile = teams[teamName];
+        return `
+          <article class="panel data-panel">
+            <h3>${displayTeam(teamName)} 核心球员影响力</h3>
+            <div class="player-table rich-table">
+              ${profile.players
+                .map(
+                  (player) => `
+                    <div class="player-row">
+                      <span>${displayPlayerName(player, teamName)} · ${player.role}</span>
+                      <b>${player.influence}</b>
+                      <small>攻 ${player.attack} / 创 ${player.creation} / 守 ${player.defense} / 状态 ${player.form}</small>
+                    </div>
+                  `
+                )
+                .join("")}
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+  }
+  if (methodBox) {
+    methodBox.innerHTML = `
+      <article class="panel data-panel">
+        <h3>六爻与数据如何合流</h3>
+        <p>世爻代表 ${homeName}，应爻代表 ${awayName}。本卦 ${gua.baseGua} 看比赛原始结构，变卦 ${gua.changedGua} 看临场走势。动爻越多，越容易出现阶段性反转、临门一脚失衡或定位球改变比分。</p>
+        <p>数据层不直接替代六爻，而是给“能不能进球、能不能守住”定上下限。攻击、创造力和定位球抬高进球期望；防守、门将和大赛经验压低失误概率。最终比分概率就是卦象方向和数据边界的交集。</p>
+      </article>
+    `;
+  }
+}
+
 function renderReport(forecast) {
+  const reportBody = document.querySelector("#report-body");
+  if (!reportBody) return;
   const top = forecast.scores[0];
   const scoreText = forecast.scores.map((s) => `${s.home}-${s.away}（${s.probability}%）`).join("、");
-  document.querySelector("#report-body").innerHTML = `
+  reportBody.innerHTML = `
     <h3>${fixtureTitle(forecast.match)} 六爻比分推演</h3>
     <p>本场主推比分为 <strong>${top.home}-${top.away}</strong>，其余备选比分为：${scoreText}。</p>
     <p>推演逻辑：六爻盘面以 ${forecast.gua.baseGua} 变 ${forecast.gua.changedGua} 为主线，世应关系显示“${forecast.gua.shiYing}”；球员数据层面，双方攻击、防守、门将与核心球员影响力共同决定预期进球区间；过往赛事经验用于修正大赛稳定性和爆冷风险。</p>
@@ -464,43 +614,68 @@ function renderReport(forecast) {
 }
 
 function renderAll() {
-  document.querySelector("#match-select").value = state.match.id;
+  if (!state.match) return;
+  const selected = document.querySelector("#match-select");
+  if (selected) selected.value = state.match.id;
   renderMatches();
   const forecast = calculateForecast();
   renderHexagram(forecast.gua);
   renderScores(forecast);
+  renderScoreInsights(forecast);
   renderEvidence(forecast);
+  renderEvidenceDetails(forecast);
   renderReport(forecast);
   renderBracket();
 }
 
 function bindForm() {
-  document.querySelector("#match-form").addEventListener("submit", (event) => {
+  const form = document.querySelector("#match-form");
+  const select = document.querySelector("#match-select");
+  const copyButton = document.querySelector("#copy-report");
+  if (!form && !select && !copyButton) return;
+  if (document.querySelector("#cast-time")) document.querySelector("#cast-time").value = state.castTime;
+  if (document.querySelector("#data-weight")) document.querySelector("#data-weight").value = state.dataWeight;
+  if (document.querySelector("#match-context")) document.querySelector("#match-context").value = state.context;
+  if (form) form.addEventListener("submit", (event) => {
     event.preventDefault();
-    state.match = matches.find((match) => match.id === document.querySelector("#match-select").value) || matches[0];
-    state.castTime = document.querySelector("#cast-time").value;
-    state.dataWeight = document.querySelector("#data-weight").value;
-    state.context = document.querySelector("#match-context").value;
+    state.match = matches.find((match) => match.id === document.querySelector("#match-select")?.value) || matches[0];
+    state.castTime = document.querySelector("#cast-time")?.value || state.castTime;
+    state.dataWeight = document.querySelector("#data-weight")?.value || state.dataWeight;
+    state.context = document.querySelector("#match-context")?.value || state.context;
+    persistState();
     renderAll();
   });
-  document.querySelector("#match-select").addEventListener("change", (event) => {
+  if (select) select.addEventListener("change", (event) => {
     state.match = matches.find((match) => match.id === event.target.value) || matches[0];
+    persistState();
     renderAll();
   });
-  document.querySelector("#copy-report").addEventListener("click", async () => {
-    const text = document.querySelector("#report-body").innerText;
+  if (copyButton) copyButton.addEventListener("click", async () => {
+    const text = document.querySelector("#report-body")?.innerText || "";
     try {
       await navigator.clipboard.writeText(text);
-      document.querySelector("#copy-report").textContent = "已复制";
-      setTimeout(() => (document.querySelector("#copy-report").textContent = "复制报告"), 1200);
+      copyButton.textContent = "已复制";
+      setTimeout(() => (copyButton.textContent = "复制报告"), 1200);
     } catch {
-      document.querySelector("#copy-report").textContent = "复制失败";
+      copyButton.textContent = "复制失败";
     }
   });
 }
 
+function bindBackToTop() {
+  const button = document.querySelector("#back-to-top");
+  if (!button) return;
+  const toggle = () => {
+    button.classList.toggle("visible", window.scrollY > 320);
+  };
+  button.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  window.addEventListener("scroll", toggle, { passive: true });
+  toggle();
+}
+
 function drawSky() {
   const canvas = document.querySelector("#sky");
+  if (!canvas) return;
   const ctx = canvas.getContext("2d");
   const ratio = window.devicePixelRatio || 1;
   const width = window.innerWidth;
@@ -533,6 +708,7 @@ function drawSky() {
 
 syncActiveMatchToNearest();
 bindForm();
+bindBackToTop();
 loadLiveData().finally(renderAll);
 drawSky();
 window.addEventListener("resize", drawSky);

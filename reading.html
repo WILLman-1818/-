@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>六爻起卦 | 六爻球局推演</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <canvas id="sky" aria-hidden="true"></canvas>
+    <div class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="./index.html" aria-label="六爻球局推演首页">
+          <span class="brand-mark">☰</span>
+          <span><strong>六爻球局推演</strong><small>Football Liuyao Forecast</small></span>
+        </a>
+        <nav class="top-nav" aria-label="主导航">
+          <a href="./index.html">首页</a>
+          <a href="./matches.html">赛程</a>
+          <a class="active" href="./reading.html">起卦</a>
+          <a href="./scores.html">比分</a>
+          <a href="./evidence.html">依据</a>
+          <a href="./report.html">报告</a>
+        </nav>
+      </header>
+
+      <main class="page-main">
+        <section class="page-hero" aria-labelledby="reading-title">
+          <p class="eyebrow">Liuyao Setup</p>
+          <h1 id="reading-title">六爻起卦</h1>
+          <p>选择比赛、起卦时间和数据权重，页面会生成本卦、变卦、世应关系和用神判断。</p>
+        </section>
+
+        <section class="reading-grid" aria-label="起卦参数">
+          <div class="panel control-panel">
+            <div class="panel-head">
+              <p class="eyebrow">Setup</p>
+              <h2>起卦参数</h2>
+            </div>
+            <form id="match-form">
+              <label>比赛<select id="match-select" name="match"></select></label>
+              <label>起卦时间<input id="cast-time" type="datetime-local" value="2026-06-18T01:00" /></label>
+              <label>
+                数据权重
+                <select id="data-weight">
+                  <option value="balanced" selected>平衡 · 六爻 55% / 数据 45%</option>
+                  <option value="liuyao">偏六爻 · 六爻 70% / 数据 30%</option>
+                  <option value="data">偏数据 · 六爻 35% / 数据 65%</option>
+                </select>
+              </label>
+              <label>
+                比赛场景
+                <select id="match-context">
+                  <option value="group" selected>小组赛常规压力</option>
+                  <option value="mustwin">必须抢分</option>
+                  <option value="cautious">双方谨慎</option>
+                </select>
+              </label>
+              <div class="button-row">
+                <button type="submit">重新推演</button>
+                <a class="secondary-button" href="./scores.html">查看比分</a>
+              </div>
+            </form>
+          </div>
+
+          <aside class="panel hexagram-panel">
+            <div class="panel-head">
+              <p class="eyebrow">Hexagram</p>
+              <h2>六爻盘面</h2>
+            </div>
+            <div id="hexagram-lines" class="hexagram-lines"></div>
+            <dl class="signal-list">
+              <div><dt>本卦</dt><dd id="base-gua">雷火丰</dd></div>
+              <div><dt>变卦</dt><dd id="changed-gua">风雷益</dd></div>
+              <div><dt>世应</dt><dd id="shi-ying">世爻受制，应爻发动</dd></div>
+              <div><dt>用神</dt><dd id="useful-god">子孙爻主进球</dd></div>
+            </dl>
+          </aside>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <p>起卦结果会保存到当前浏览器，切换到比分、依据或报告页面时会沿用同一场比赛。</p>
+      </footer>
+    </div>
+
+    <button id="back-to-top" class="back-to-top" type="button" aria-label="回到顶部">↑</button>
+    <script src="./data.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

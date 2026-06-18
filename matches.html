@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>赛程选择 | 六爻球局推演</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <canvas id="sky" aria-hidden="true"></canvas>
+    <div class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="./index.html" aria-label="六爻球局推演首页">
+          <span class="brand-mark">☰</span>
+          <span><strong>六爻球局推演</strong><small>Football Liuyao Forecast</small></span>
+        </a>
+        <nav class="top-nav" aria-label="主导航">
+          <a href="./index.html">首页</a>
+          <a class="active" href="./matches.html">赛程</a>
+          <a href="./reading.html">起卦</a>
+          <a href="./scores.html">比分</a>
+          <a href="./evidence.html">依据</a>
+          <a href="./report.html">报告</a>
+        </nav>
+      </header>
+
+      <main class="page-main">
+        <section class="page-hero" aria-labelledby="matches-title">
+          <p class="eyebrow">Match Board</p>
+          <h1 id="matches-title">赛程选择</h1>
+          <p>最近的可用赛程会排在前面。点击任意比赛后，系统会保存这场对阵并进入起卦页面。</p>
+        </section>
+
+        <section class="live-strip" aria-label="实时数据状态">
+          <div><span>实时数据</span><strong id="live-source">本地样例数据</strong></div>
+          <div><span>更新策略</span><strong>未开赛/进行中刷新，完赛保留记录</strong></div>
+          <div><span>最后同步</span><strong id="last-sync">等待接口接入</strong></div>
+        </section>
+
+        <section class="section-block">
+          <div id="match-list" class="match-list"></div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <p>赛程来自本地样例或实时 API。完赛比赛只保留赛果记录，不再用实时接口覆盖。</p>
+      </footer>
+    </div>
+
+    <button id="back-to-top" class="back-to-top" type="button" aria-label="回到顶部">↑</button>
+    <script src="./data.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>推演报告 | 六爻球局推演</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <canvas id="sky" aria-hidden="true"></canvas>
+    <div class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="./index.html" aria-label="六爻球局推演首页">
+          <span class="brand-mark">☰</span>
+          <span><strong>六爻球局推演</strong><small>Football Liuyao Forecast</small></span>
+        </a>
+        <nav class="top-nav" aria-label="主导航">
+          <a href="./index.html">首页</a>
+          <a href="./matches.html">赛程</a>
+          <a href="./reading.html">起卦</a>
+          <a href="./scores.html">比分</a>
+          <a href="./evidence.html">依据</a>
+          <a class="active" href="./report.html">报告</a>
+        </nav>
+      </header>
+
+      <main class="page-main">
+        <section class="page-hero" aria-labelledby="report-title">
+          <p class="eyebrow">Publish Draft</p>
+          <h1 id="report-title">可发布推演报告</h1>
+          <p>选择比赛后，这里会生成一段可以复制到前台内容、社媒或文章里的推演文案。</p>
+        </section>
+
+        <section class="panel compact-control" aria-label="报告参数">
+          <form id="match-form">
+            <label>比赛<select id="match-select" name="match"></select></label>
+            <label>起卦时间<input id="cast-time" type="datetime-local" value="2026-06-18T01:00" /></label>
+            <label>
+              数据权重
+              <select id="data-weight">
+                <option value="balanced" selected>平衡 · 六爻 55% / 数据 45%</option>
+                <option value="liuyao">偏六爻 · 六爻 70% / 数据 30%</option>
+                <option value="data">偏数据 · 六爻 35% / 数据 65%</option>
+              </select>
+            </label>
+            <label>
+              比赛场景
+              <select id="match-context">
+                <option value="group" selected>小组赛常规压力</option>
+                <option value="mustwin">必须抢分</option>
+                <option value="cautious">双方谨慎</option>
+              </select>
+            </label>
+            <div class="button-row">
+              <button type="submit">生成报告</button>
+              <button id="copy-report" type="button" class="secondary-button">复制报告</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel report-panel" aria-labelledby="report-body-title">
+          <div class="panel-head">
+            <p class="eyebrow">Draft</p>
+            <h2 id="report-body-title">报告正文</h2>
+          </div>
+          <div id="report-body" class="report-body"></div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <p>报告内容适合做赛前观点和娱乐研究展示，不构成投注建议。</p>
+      </footer>
+    </div>
+
+    <button id="back-to-top" class="back-to-top" type="button" aria-label="回到顶部">↑</button>
+    <script src="./data.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

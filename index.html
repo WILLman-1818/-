@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>六爻球局推演 | World Cup Liuyao Lab</title>
+    <title>六爻球局推演 | 首页</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -18,31 +18,30 @@
           </span>
         </a>
         <nav class="top-nav" aria-label="主导航">
-          <a href="#matches">赛程</a>
-          <a href="#reading">起卦</a>
-          <a href="#scores">比分</a>
-          <a href="#evidence">依据</a>
-          <a href="#report">报告</a>
+          <a class="active" href="./index.html">首页</a>
+          <a href="./matches.html">赛程</a>
+          <a href="./reading.html">起卦</a>
+          <a href="./scores.html">比分</a>
+          <a href="./evidence.html">依据</a>
+          <a href="./report.html">报告</a>
         </nav>
       </header>
 
       <main>
-        <section class="hero" aria-labelledby="hero-title">
+        <section class="hero home-hero" aria-labelledby="hero-title">
           <div class="hero-copy">
-            <p class="eyebrow">只用六爻 · 结合球员数据与过往赛事经验</p>
+            <p class="eyebrow">首页 · 晋级树与实时赛事中枢</p>
             <h1 id="hero-title">
-              <span>一场比赛，</span>
-              <span>一卦推演，</span>
-              <span>三到四个比分概率。</span>
+              <span>以六爻看走势，</span>
+              <span>以数据定边界。</span>
             </h1>
             <p class="hero-lead">
-              <span>六爻负责判断世应攻守、动爻变盘和用神得失；</span>
-              <span>球员数据负责校准进攻、防守、门将和创造力；</span>
-              <span>过往赛事经验负责修正大赛稳定性与临场风险。</span>
+              <span>首页固定展示世界杯晋级树，等待实时接口持续更新。</span>
+              <span>赛程、起卦、比分、依据和报告已拆成独立页面，方便用户按任务进入。</span>
             </p>
             <div class="hero-actions">
-              <a class="primary-link" href="#matches">选择赛程</a>
-              <a class="ghost-link" href="#scores">查看比分概率</a>
+              <a class="primary-link" href="./matches.html">选择赛程</a>
+              <a class="ghost-link" href="./scores.html">查看比分概率</a>
             </div>
           </div>
 
@@ -67,111 +66,31 @@
           </div>
         </section>
 
-        <section id="matches" class="section-block" aria-labelledby="matches-title">
-          <div class="section-title">
-            <p class="eyebrow">Match Board</p>
-            <h2 id="matches-title">赛程选择</h2>
-            <p>先选一场比赛。系统会读取双方核心球员评分、球队近况、大赛经验，再用比赛时间起六爻卦。</p>
-          </div>
-          <div id="match-list" class="match-list"></div>
+        <section class="home-actions section-block" aria-label="功能入口">
+          <a class="route-card" href="./matches.html">
+            <span>01</span>
+            <strong>赛程选择</strong>
+            <p>查看最近赛程，点击比赛后进入起卦页面。</p>
+          </a>
+          <a class="route-card" href="./reading.html">
+            <span>02</span>
+            <strong>六爻起卦</strong>
+            <p>调整起卦时间、比赛压力和六爻/数据权重。</p>
+          </a>
+          <a class="route-card" href="./evidence.html">
+            <span>03</span>
+            <strong>数据依据</strong>
+            <p>展开球队底盘、球员影响力和世应逻辑。</p>
+          </a>
         </section>
 
-        <section id="reading" class="reading-grid" aria-labelledby="reading-title">
-          <div class="panel control-panel">
-            <div class="panel-head">
-              <p class="eyebrow">Liuyao Setup</p>
-              <h2 id="reading-title">起卦参数</h2>
-            </div>
-            <form id="match-form">
-              <label>
-                比赛
-                <select id="match-select" name="match"></select>
-              </label>
-              <label>
-                起卦时间
-                <input id="cast-time" type="datetime-local" value="2026-06-18T01:00" />
-              </label>
-              <label>
-                数据权重
-                <select id="data-weight">
-                  <option value="balanced" selected>平衡 · 六爻 55% / 数据 45%</option>
-                  <option value="liuyao">偏六爻 · 六爻 70% / 数据 30%</option>
-                  <option value="data">偏数据 · 六爻 35% / 数据 65%</option>
-                </select>
-              </label>
-              <label>
-                比赛场景
-                <select id="match-context">
-                  <option value="group" selected>小组赛常规压力</option>
-                  <option value="mustwin">必须抢分</option>
-                  <option value="cautious">双方谨慎</option>
-                </select>
-              </label>
-              <div class="button-row">
-                <button type="submit">重新推演</button>
-                <button id="copy-report" type="button" class="secondary-button">复制报告</button>
-              </div>
-            </form>
-          </div>
-
-          <aside class="panel hexagram-panel">
-            <div class="panel-head">
-              <p class="eyebrow">Hexagram</p>
-              <h2>六爻盘面</h2>
-            </div>
-            <div id="hexagram-lines" class="hexagram-lines"></div>
-            <dl class="signal-list">
-              <div><dt>本卦</dt><dd id="base-gua">雷火丰</dd></div>
-              <div><dt>变卦</dt><dd id="changed-gua">风雷益</dd></div>
-              <div><dt>世应</dt><dd id="shi-ying">世爻受制，应爻发动</dd></div>
-              <div><dt>用神</dt><dd id="useful-god">子孙爻主进球</dd></div>
-            </dl>
-          </aside>
-        </section>
-
-        <section id="scores" class="section-block" aria-labelledby="scores-title">
-          <div class="section-title">
-            <p class="eyebrow">Score Distribution</p>
-            <h2 id="scores-title">推演比分与概率</h2>
-            <p>给出 3-4 个最可能比分。概率不是绝对胜率，而是六爻盘面、球员数据和赛事经验共同收敛后的内容概率。</p>
-          </div>
-          <div id="score-list" class="score-list"></div>
-        </section>
-
-        <section id="bracket" class="section-block" aria-labelledby="bracket-title">
+        <section id="bracket" class="section-block bracket-home" aria-labelledby="bracket-title">
           <div class="section-title">
             <p class="eyebrow">Knockout Tree</p>
             <h2 id="bracket-title">世界杯晋级树状赛程表</h2>
-            <p>小组赛结束后，晋级球队会进入这里。已确认晋级的队伍固定显示，未确认位置用“待定”占位；后续可由实时赛程接口自动更新。</p>
+            <p>这个模块固定在首页。小组赛结束后，晋级球队会进入这里；已确认晋级的队伍固定显示，未确认位置用“待定”占位，后续由实时赛程接口更新。</p>
           </div>
           <div id="bracket-tree" class="bracket-tree"></div>
-        </section>
-
-        <section id="evidence" class="evidence-grid" aria-labelledby="evidence-title">
-          <div class="section-title wide-title">
-            <p class="eyebrow">Evidence Layer</p>
-            <h2 id="evidence-title">推演依据</h2>
-          </div>
-          <article class="panel evidence-panel">
-            <h3>六爻解释</h3>
-            <div id="liuyao-analysis" class="analysis-copy"></div>
-          </article>
-          <article class="panel evidence-panel">
-            <h3>球员数据校准</h3>
-            <div id="player-analysis" class="analysis-copy"></div>
-          </article>
-          <article class="panel evidence-panel">
-            <h3>过往赛事经验</h3>
-            <div id="history-analysis" class="analysis-copy"></div>
-          </article>
-        </section>
-
-        <section id="report" class="panel report-panel" aria-labelledby="report-title">
-          <div class="panel-head">
-            <p class="eyebrow">Publish Draft</p>
-            <h2 id="report-title">可发布推演报告</h2>
-          </div>
-          <div id="report-body" class="report-body"></div>
         </section>
       </main>
 
@@ -180,6 +99,7 @@
       </footer>
     </div>
 
+    <button id="back-to-top" class="back-to-top" type="button" aria-label="回到顶部">↑</button>
     <script src="./data.js"></script>
     <script src="./app.js"></script>
   </body>

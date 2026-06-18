@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>比分概率 | 六爻球局推演</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <canvas id="sky" aria-hidden="true"></canvas>
+    <div class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="./index.html" aria-label="六爻球局推演首页">
+          <span class="brand-mark">☰</span>
+          <span><strong>六爻球局推演</strong><small>Football Liuyao Forecast</small></span>
+        </a>
+        <nav class="top-nav" aria-label="主导航">
+          <a href="./index.html">首页</a>
+          <a href="./matches.html">赛程</a>
+          <a href="./reading.html">起卦</a>
+          <a class="active" href="./scores.html">比分</a>
+          <a href="./evidence.html">依据</a>
+          <a href="./report.html">报告</a>
+        </nav>
+      </header>
+
+      <main class="page-main">
+        <section class="page-hero" aria-labelledby="scores-title">
+          <p class="eyebrow">Score Distribution</p>
+          <h1 id="scores-title">推演比分与概率</h1>
+          <p>这里不仅给出 3-4 个比分，还解释预期进球、比分带和六爻盘面如何共同收敛到这些结果。</p>
+        </section>
+
+        <section class="panel compact-control" aria-label="比分参数">
+          <form id="match-form">
+            <label>比赛<select id="match-select" name="match"></select></label>
+            <label>起卦时间<input id="cast-time" type="datetime-local" value="2026-06-18T01:00" /></label>
+            <label>
+              数据权重
+              <select id="data-weight">
+                <option value="balanced" selected>平衡 · 六爻 55% / 数据 45%</option>
+                <option value="liuyao">偏六爻 · 六爻 70% / 数据 30%</option>
+                <option value="data">偏数据 · 六爻 35% / 数据 65%</option>
+              </select>
+            </label>
+            <label>
+              比赛场景
+              <select id="match-context">
+                <option value="group" selected>小组赛常规压力</option>
+                <option value="mustwin">必须抢分</option>
+                <option value="cautious">双方谨慎</option>
+              </select>
+            </label>
+            <div class="button-row"><button type="submit">重新计算比分</button></div>
+          </form>
+        </section>
+
+        <section class="section-block">
+          <div id="score-list" class="score-list"></div>
+        </section>
+
+        <section id="score-insights" class="insight-grid section-block" aria-label="比分分析"></section>
+      </main>
+
+      <footer class="site-footer">
+        <p>概率是内容推演概率，不是投注胜率。正式发布前仍需要复核首发、伤停和临场新闻。</p>
+      </footer>
+    </div>
+
+    <button id="back-to-top" class="back-to-top" type="button" aria-label="回到顶部">↑</button>
+    <script src="./data.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

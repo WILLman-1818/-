@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>推演依据 | 六爻球局推演</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <canvas id="sky" aria-hidden="true"></canvas>
+    <div class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="./index.html" aria-label="六爻球局推演首页">
+          <span class="brand-mark">☰</span>
+          <span><strong>六爻球局推演</strong><small>Football Liuyao Forecast</small></span>
+        </a>
+        <nav class="top-nav" aria-label="主导航">
+          <a href="./index.html">首页</a>
+          <a href="./matches.html">赛程</a>
+          <a href="./reading.html">起卦</a>
+          <a href="./scores.html">比分</a>
+          <a class="active" href="./evidence.html">依据</a>
+          <a href="./report.html">报告</a>
+        </nav>
+      </header>
+
+      <main class="page-main">
+        <section class="page-hero" aria-labelledby="evidence-title">
+          <p class="eyebrow">Evidence Layer</p>
+          <h1 id="evidence-title">推演依据</h1>
+          <p>这一页展开六爻、球队和球员三层依据，让比分判断不是一句话结论，而是有数据边界和盘面逻辑。</p>
+        </section>
+
+        <section class="panel compact-control" aria-label="依据参数">
+          <form id="match-form">
+            <label>比赛<select id="match-select" name="match"></select></label>
+            <label>起卦时间<input id="cast-time" type="datetime-local" value="2026-06-18T01:00" /></label>
+            <label>
+              数据权重
+              <select id="data-weight">
+                <option value="balanced" selected>平衡 · 六爻 55% / 数据 45%</option>
+                <option value="liuyao">偏六爻 · 六爻 70% / 数据 30%</option>
+                <option value="data">偏数据 · 六爻 35% / 数据 65%</option>
+              </select>
+            </label>
+            <label>
+              比赛场景
+              <select id="match-context">
+                <option value="group" selected>小组赛常规压力</option>
+                <option value="mustwin">必须抢分</option>
+                <option value="cautious">双方谨慎</option>
+              </select>
+            </label>
+            <div class="button-row"><button type="submit">刷新依据</button></div>
+          </form>
+        </section>
+
+        <section class="evidence-grid section-block" aria-label="核心依据">
+          <article class="panel evidence-panel">
+            <h3>六爻解释</h3>
+            <div id="liuyao-analysis" class="analysis-copy"></div>
+          </article>
+          <article class="panel evidence-panel">
+            <h3>球员数据校准</h3>
+            <div id="player-analysis" class="analysis-copy"></div>
+          </article>
+          <article class="panel evidence-panel">
+            <h3>过往赛事经验</h3>
+            <div id="history-analysis" class="analysis-copy"></div>
+          </article>
+        </section>
+
+        <section class="section-block">
+          <div class="section-title">
+            <p class="eyebrow">Team Layer</p>
+            <h2>球队数据拆解</h2>
+          </div>
+          <div id="team-data" class="insight-grid"></div>
+        </section>
+
+        <section class="section-block">
+          <div class="section-title">
+            <p class="eyebrow">Player Layer</p>
+            <h2>核心球员影响力</h2>
+          </div>
+          <div id="player-data" class="insight-grid"></div>
+        </section>
+
+        <section id="method-data" class="section-block"></section>
+      </main>
+
+      <footer class="site-footer">
+        <p>当前球员评分是可编辑样例字段；接入实时球员统计后，这里会成为最主要的解释页面。</p>
+      </footer>
+    </div>
+
+    <button id="back-to-top" class="back-to-top" type="button" aria-label="回到顶部">↑</button>
+    <script src="./data.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
