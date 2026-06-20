@@ -104,6 +104,31 @@ window.WORLD_CUP_BRACKET = {
   ]
 };
 
+window.WORLD_CUP_STANDINGS = {
+  updatedAt: "等待实时接口更新",
+  source: "本地占位积分表",
+  groups: [
+    {
+      name: "K 组",
+      rows: [
+        { rank: 1, team: "哥伦比亚", played: 1, win: 1, draw: 0, lose: 0, goalsFor: 1, goalsAgainst: 0, goalDiff: 1, points: 3 },
+        { rank: 2, team: "葡萄牙", played: 1, win: 0, draw: 1, lose: 0, goalsFor: 1, goalsAgainst: 1, goalDiff: 0, points: 1 },
+        { rank: 3, team: "刚果民主共和国", played: 1, win: 0, draw: 1, lose: 0, goalsFor: 1, goalsAgainst: 1, goalDiff: 0, points: 1 },
+        { rank: 4, team: "乌兹别克斯坦", played: 1, win: 0, draw: 0, lose: 1, goalsFor: 0, goalsAgainst: 1, goalDiff: -1, points: 0 }
+      ]
+    },
+    {
+      name: "L 组",
+      rows: [
+        { rank: 1, team: "英格兰", played: 1, win: 1, draw: 0, lose: 0, goalsFor: 2, goalsAgainst: 1, goalDiff: 1, points: 3 },
+        { rank: 2, team: "加纳", played: 1, win: 0, draw: 1, lose: 0, goalsFor: 1, goalsAgainst: 1, goalDiff: 0, points: 1 },
+        { rank: 3, team: "巴拿马", played: 1, win: 0, draw: 1, lose: 0, goalsFor: 1, goalsAgainst: 1, goalDiff: 0, points: 1 },
+        { rank: 4, team: "克罗地亚", played: 1, win: 0, draw: 0, lose: 1, goalsFor: 1, goalsAgainst: 2, goalDiff: -1, points: 0 }
+      ]
+    }
+  ]
+};
+
 window.TEAM_PROFILES = {
   葡萄牙: {
     teamForm: 78,

@@ -591,6 +591,79 @@ select {
   font: 900 24px/1 Georgia, serif;
 }
 
+.standings-board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.standings-group,
+.standings-empty {
+  border: 1px solid rgba(244, 234, 213, 0.2);
+  border-radius: 8px;
+  padding: 16px;
+  color: var(--paper);
+  background: rgba(20, 15, 13, 0.5);
+  box-shadow: var(--shadow);
+}
+
+.standings-group h3 {
+  margin: 0 0 12px;
+  color: var(--gold);
+}
+
+.standings-table {
+  display: grid;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.standings-row {
+  display: grid;
+  grid-template-columns: 42px minmax(120px, 1fr) repeat(4, 34px) 58px 42px 42px;
+  gap: 8px;
+  align-items: center;
+  min-width: 620px;
+  border: 1px solid rgba(244, 234, 213, 0.1);
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: rgba(244, 234, 213, 0.06);
+}
+
+.standings-head {
+  color: rgba(244, 234, 213, 0.58);
+  font-size: 12px;
+  font-weight: 900;
+  background: rgba(244, 234, 213, 0.1);
+}
+
+.standings-row strong {
+  color: var(--paper-strong);
+}
+
+.standings-row b {
+  color: var(--gold);
+}
+
+.standings-row.qualify {
+  border-color: rgba(197, 150, 53, 0.4);
+  background: rgba(197, 150, 53, 0.12);
+}
+
+.standings-empty {
+  grid-column: 1 / -1;
+}
+
+.standings-empty strong {
+  color: var(--gold);
+}
+
+.standings-empty p {
+  margin: 10px 0 0;
+  color: rgba(244, 234, 213, 0.72);
+  line-height: 1.75;
+}
+
 .bracket-tree {
   display: grid;
   grid-template-columns: repeat(5, minmax(220px, 1fr));
@@ -791,7 +864,8 @@ select {
   .reading-grid,
   .evidence-grid,
   .home-actions,
-  .insight-grid {
+  .insight-grid,
+  .standings-board {
     grid-template-columns: 1fr;
   }
 

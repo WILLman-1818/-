@@ -1,6 +1,7 @@
 const matches = window.LIUYAO_MATCHES || [];
 const teams = window.TEAM_PROFILES || {};
 let bracketTree = window.WORLD_CUP_BRACKET || { rounds: [] };
+let standingsTable = window.WORLD_CUP_STANDINGS || { groups: [] };
 
 const guaNames = ["乾为天", "坤为地", "水雷屯", "山水蒙", "水火既济", "雷火丰", "风雷益", "泽火革", "山泽损", "火地晋"];
 const lineLabels = ["初爻", "二爻", "三爻", "四爻", "五爻", "上爻"];
@@ -208,6 +209,7 @@ async function loadLiveData() {
     const payload = await response.json();
     mergeLiveMatches(payload.matches || []);
     mergeLiveTeams(payload.teams || {});
+    if (payload.standings?.groups?.length) standingsTable = payload.standings;
     if (payload.bracket) bracketTree = payload.bracket;
     syncActiveMatchToNearest();
     updateLiveStatus(payload.source || "实时接口", payload.updatedAt || new Date().toISOString());
@@ -816,6 +818,60 @@ function renderBracket() {
     .join("");
 }
 
+function renderStandings() {
+  const board = document.querySelector("#standings-board");
+  if (!board) return;
+  const groups = standingsTable.groups || [];
+  if (!groups.length) {
+    board.innerHTML = `
+      <article class="standings-empty">
+        <strong>等待实时小组积分数据</strong>
+        <p>上线后将通过 API-FOOTBALL 的 standings 接口自动读取各组积分、净胜球、进失球和排名。请确认 Netlify 环境变量里已经配置 FOOTBALL_API_KEY。</p>
+      </article>
+    `;
+    return;
+  }
+  board.innerHTML = groups
+    .map(
+      (group) => `
+        <section class="standings-group">
+          <h3>${group.name}</h3>
+          <div class="standings-table" role="table" aria-label="${group.name} 积分榜">
+            <div class="standings-row standings-head" role="row">
+              <span>排名</span>
+              <span>球队</span>
+              <span>赛</span>
+              <span>胜</span>
+              <span>平</span>
+              <span>负</span>
+              <span>进/失</span>
+              <span>净</span>
+              <span>分</span>
+            </div>
+            ${group.rows
+              .map(
+                (row) => `
+                  <div class="standings-row${row.rank <= 2 ? " qualify" : ""}" role="row">
+                    <span>${row.rank || "-"}</span>
+                    <strong>${displayTeam(row.team)}</strong>
+                    <span>${row.played}</span>
+                    <span>${row.win}</span>
+                    <span>${row.draw}</span>
+                    <span>${row.lose}</span>
+                    <span>${row.goalsFor}/${row.goalsAgainst}</span>
+                    <span>${row.goalDiff > 0 ? "+" : ""}${row.goalDiff}</span>
+                    <b>${row.points}</b>
+                  </div>
+                `
+              )
+              .join("")}
+          </div>
+        </section>
+      `
+    )
+    .join("");
+}
+
 function renderHexagram(gua) {
   const hero = document.querySelector("#hero-hexagram");
   const box = document.querySelector("#hexagram-lines");
@@ -1045,6 +1101,7 @@ function renderAll() {
   renderEvidence(forecast);
   renderEvidenceDetails(forecast);
   renderReport(forecast);
+  renderStandings();
   renderBracket();
 }
 

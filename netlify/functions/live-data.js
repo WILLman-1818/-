@@ -15,6 +15,7 @@ exports.handler = async () => {
       updatedAt: new Date().toISOString(),
       matches: [],
       teams: {},
+      standings: null,
       bracket: null,
       message: "FOOTBALL_API_KEY is not configured. Frontend will use local sample data."
     });
@@ -23,8 +24,16 @@ exports.handler = async () => {
   try {
     const fixtures = await apiFootball("/fixtures", { league: leagueId, season, timezone }, apiKey);
     const teams = await apiFootball("/teams", { league: leagueId, season }, apiKey);
+    let standings = { response: [] };
+    let standingsMessage = "";
+    try {
+      standings = await apiFootball("/standings", { league: leagueId, season }, apiKey);
+    } catch (error) {
+      standingsMessage = error.message;
+    }
     const normalizedMatches = normalizeFixtures(fixtures.response || []);
     const normalizedTeams = normalizeTeams(teams.response || [], normalizedMatches);
+    const normalizedStandings = normalizeStandings(standings.response || []);
     const bracket = buildBracket(normalizedMatches);
 
     return json({
@@ -32,6 +41,8 @@ exports.handler = async () => {
       updatedAt: new Date().toISOString(),
       matches: normalizedMatches,
       teams: normalizedTeams,
+      standings: normalizedStandings,
+      standingsMessage,
       bracket
     });
   } catch (error) {
@@ -41,6 +52,7 @@ exports.handler = async () => {
         updatedAt: new Date().toISOString(),
         matches: [],
         teams: {},
+        standings: null,
         bracket: null,
         message: error.message
       },
@@ -131,6 +143,44 @@ function normalizeTeams(teamRows, matches) {
   });
 
   return result;
+}
+
+function normalizeStandings(rows) {
+  const league = rows[0]?.league || {};
+  const groups = league.standings || [];
+  return {
+    updatedAt: new Date().toISOString(),
+    source: "API-FOOTBALL standings",
+    league: league.name || "World Cup",
+    season: league.season || "",
+    groups: groups.map((groupRows, index) => {
+      const first = groupRows[0] || {};
+      return {
+        name: normalizeGroupName(first.group || `Group ${index + 1}`),
+        rows: groupRows.map((row) => ({
+          rank: row.rank || 0,
+          team: row.team?.name || "待定",
+          points: row.points ?? 0,
+          played: row.all?.played ?? 0,
+          win: row.all?.win ?? 0,
+          draw: row.all?.draw ?? 0,
+          lose: row.all?.lose ?? 0,
+          goalsFor: row.all?.goals?.for ?? 0,
+          goalsAgainst: row.all?.goals?.against ?? 0,
+          goalDiff: row.goalsDiff ?? 0,
+          form: row.form || "",
+          status: row.status || ""
+        }))
+      };
+    })
+  };
+}
+
+function normalizeGroupName(groupName) {
+  return String(groupName)
+    .replace(/World Cup\s*-\s*/i, "")
+    .replace(/Group\s+([A-Z])/i, "$1 组")
+    .replace(/Group\s+(\d+)/i, "第 $1 组");
 }
 
 function makeTeamProfile(teamName, seed) {
