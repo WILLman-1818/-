@@ -183,13 +183,65 @@ function normalizeGroupName(groupName) {
     .replace(/Group\s+(\d+)/i, "第 $1 组");
 }
 
+const TEAM_BASELINES = {
+  Argentina: 91,
+  Brazil: 90,
+  France: 91,
+  England: 90,
+  Spain: 88,
+  Portugal: 88,
+  Germany: 87,
+  Netherlands: 86,
+  Belgium: 84,
+  Croatia: 83,
+  Uruguay: 84,
+  Colombia: 82,
+  Switzerland: 78,
+  Denmark: 78,
+  Morocco: 78,
+  USA: 76,
+  Mexico: 76,
+  Canada: 74,
+  Japan: 78,
+  "South Korea": 75,
+  Ghana: 70,
+  "Congo DR": 69,
+  Panama: 62,
+  Uzbekistan: 66,
+  Australia: 72,
+  Senegal: 78,
+  Iran: 73,
+  "Saudi Arabia": 68,
+  Qatar: 66,
+  Tunisia: 70,
+  Ecuador: 75,
+  Türkiye: 76,
+  Turkey: 76,
+  Serbia: 76,
+  Poland: 76,
+  Austria: 77,
+  Scotland: 72,
+  Norway: 76,
+  Algeria: 73,
+  Haiti: 60,
+  Iraq: 66,
+  Jordan: 64,
+  Paraguay: 73,
+  "South Africa": 69
+};
+
+function teamBaseline(teamName, seed) {
+  return TEAM_BASELINES[teamName] || 64 + (seed % 13);
+}
+
 function makeTeamProfile(teamName, seed) {
-  const attack = 66 + (seed % 23);
-  const defense = 64 + ((seed >> 3) % 23);
-  const goalkeeper = 63 + ((seed >> 6) % 24);
-  const teamForm = Math.round((attack + defense + goalkeeper) / 3);
-  const setPiece = 62 + ((seed >> 9) % 25);
-  const tournamentExperience = 56 + ((seed >> 12) % 35);
+  const baseline = teamBaseline(teamName, seed);
+  const attack = clampNumber(baseline + ((seed % 7) - 3), 52, 92);
+  const defense = clampNumber(baseline - 2 + (((seed >> 3) % 7) - 3), 50, 90);
+  const goalkeeper = clampNumber(baseline - 3 + (((seed >> 6) % 7) - 3), 50, 90);
+  const teamForm = Math.round((attack + defense + goalkeeper + baseline) / 4);
+  const setPiece = clampNumber(baseline - 4 + (((seed >> 9) % 9) - 4), 48, 88);
+  const tournamentExperience = clampNumber(baseline - 5 + (((seed >> 12) % 11) - 5), 46, 90);
 
   return {
     teamForm,
@@ -206,6 +258,10 @@ function makeTeamProfile(teamName, seed) {
       { name: `${teamName} 门将`, role: "门将", influence: goalkeeper, attack: 8, creation: 34, defense: goalkeeper, form: teamForm }
     ]
   };
+}
+
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function buildBracket(matches) {

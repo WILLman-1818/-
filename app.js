@@ -36,9 +36,56 @@ const gateAnchors = {
   "动爻翻局": ["2-2", "3-2", "2-3", "2-1", "1-2"]
 };
 const forecastModes = {
-  balanced: { name: "综合断法", data: 0.44, gua: 0.42, history: 0.14, risk: 0.92 },
-  liuyao: { name: "偏六爻断法", data: 0.18, gua: 0.68, history: 0.14, risk: 1.1 },
-  data: { name: "偏数据断法", data: 0.68, gua: 0.18, history: 0.14, risk: 0.84 }
+  balanced: { name: "综合断法", data: 0.58, gua: 0.28, history: 0.14, risk: 0.9 },
+  liuyao: { name: "偏六爻断法", data: 0.36, gua: 0.5, history: 0.14, risk: 1.04 },
+  data: { name: "偏数据断法", data: 0.76, gua: 0.1, history: 0.14, risk: 0.82 }
+};
+const teamStrengthBaselines = {
+  阿根廷: 91,
+  巴西: 90,
+  法国: 91,
+  英格兰: 90,
+  西班牙: 88,
+  葡萄牙: 88,
+  德国: 87,
+  荷兰: 86,
+  比利时: 84,
+  克罗地亚: 83,
+  乌拉圭: 84,
+  哥伦比亚: 82,
+  意大利: 84,
+  瑞士: 78,
+  丹麦: 78,
+  摩洛哥: 78,
+  美国: 76,
+  墨西哥: 76,
+  加拿大: 74,
+  日本: 78,
+  韩国: 75,
+  加纳: 70,
+  刚果民主共和国: 69,
+  巴拿马: 62,
+  乌兹别克斯坦: 66,
+  哥斯达黎加: 67,
+  澳大利亚: 72,
+  塞内加尔: 78,
+  伊朗: 73,
+  沙特阿拉伯: 68,
+  卡塔尔: 66,
+  突尼斯: 70,
+  厄瓜多尔: 75,
+  土耳其: 76,
+  塞尔维亚: 76,
+  波兰: 76,
+  奥地利: 77,
+  苏格兰: 72,
+  挪威: 76,
+  阿尔及利亚: 73,
+  海地: 60,
+  伊拉克: 66,
+  约旦: 64,
+  巴拉圭: 73,
+  南非: 69
 };
 const scenarioProfiles = {
   group: {
@@ -427,18 +474,99 @@ function weightedAverage(items, key) {
   return items.reduce((sum, item) => sum + item[key], 0) / items.length;
 }
 
+function resolveTeamProfile(teamName) {
+  const displayName = displayTeam(teamName);
+  const profile = teams[teamName] || teams[displayName];
+  if (profile?.players?.length) return profile;
+  const baseline = teamStrengthBaseline(teamName);
+  return {
+    teamForm: baseline,
+    attack: baseline,
+    defense: clamp(baseline - 2, 52, 92),
+    goalkeeper: clamp(baseline - 3, 50, 90),
+    setPiece: clamp(baseline - 4, 50, 88),
+    tournamentExperience: clamp(baseline - 5, 48, 90),
+    recentExperience: "暂无深度球员数据，先按国家队基本实力和实时赛果保守校准。",
+    players: [
+      { name: `${displayName} 进攻核心`, role: "前场", influence: baseline, attack: baseline, creation: baseline - 3, defense: 44, form: baseline },
+      { name: `${displayName} 中场核心`, role: "中场", influence: baseline - 2, attack: baseline - 8, creation: baseline - 1, defense: baseline - 8, form: baseline - 1 },
+      { name: `${displayName} 防守核心`, role: "后卫", influence: baseline - 4, attack: 42, creation: 48, defense: baseline - 1, form: baseline - 2 }
+    ]
+  };
+}
+
+function teamStrengthBaseline(teamName) {
+  const displayName = displayTeam(teamName);
+  return teamStrengthBaselines[teamName] || teamStrengthBaselines[displayName] || 68;
+}
+
+function teamStandingRow(teamName) {
+  const canonical = canonicalTeamName(teamName);
+  for (const group of standingsTable.groups || []) {
+    const row = (group.rows || []).find((item) => canonicalTeamName(item.team) === canonical);
+    if (row) return row;
+  }
+  return null;
+}
+
+function teamRecentStats(teamName) {
+  const canonical = canonicalTeamName(teamName);
+  const finished = matches.filter((match) => hasFinalScore(match) && [match.home, match.away].some((name) => canonicalTeamName(name) === canonical));
+  const row = teamStandingRow(teamName);
+  const fromMatches = finished.reduce(
+    (stats, match) => {
+      const isHome = canonicalTeamName(match.home) === canonical;
+      const goalsFor = isHome ? match.homeScore : match.awayScore;
+      const goalsAgainst = isHome ? match.awayScore : match.homeScore;
+      stats.played += 1;
+      stats.goalsFor += goalsFor;
+      stats.goalsAgainst += goalsAgainst;
+      stats.points += goalsFor > goalsAgainst ? 3 : goalsFor === goalsAgainst ? 1 : 0;
+      return stats;
+    },
+    { played: 0, goalsFor: 0, goalsAgainst: 0, points: 0 }
+  );
+  const played = fromMatches.played || row?.played || 0;
+  const goalsFor = fromMatches.played ? fromMatches.goalsFor : row?.goalsFor || 0;
+  const goalsAgainst = fromMatches.played ? fromMatches.goalsAgainst : row?.goalsAgainst || 0;
+  const points = fromMatches.played ? fromMatches.points : row?.points || 0;
+  return {
+    played,
+    goalsFor,
+    goalsAgainst,
+    points,
+    goalsForPerGame: played ? goalsFor / played : 0,
+    goalsAgainstPerGame: played ? goalsAgainst / played : 0,
+    pointsPerGame: played ? points / played : 0,
+    goalDiffPerGame: played ? (goalsFor - goalsAgainst) / played : 0
+  };
+}
+
 function teamPower(teamName) {
-  const team = teams[teamName];
+  const team = resolveTeamProfile(teamName);
   const players = team.players;
-  const attackCore = weightedAverage(players, "attack") * 0.32 + weightedAverage(players, "creation") * 0.24 + team.attack * 0.24 + team.teamForm * 0.2;
-  const defenseCore = weightedAverage(players, "defense") * 0.28 + team.defense * 0.28 + team.goalkeeper * 0.24 + team.teamForm * 0.2;
-  const experienceCore = team.tournamentExperience * 0.58 + team.teamForm * 0.22 + team.setPiece * 0.2;
+  const baseline = teamStrengthBaseline(teamName);
+  const recent = teamRecentStats(teamName);
+  const recentAttack = recent.played ? clamp(64 + recent.goalsForPerGame * 10 + recent.pointsPerGame * 2, 52, 92) : baseline;
+  const recentDefense = recent.played ? clamp(82 - recent.goalsAgainstPerGame * 9 + recent.goalDiffPerGame * 3, 50, 92) : baseline;
+  const playerAttack = weightedAverage(players, "attack");
+  const playerCreation = weightedAverage(players, "creation");
+  const playerDefense = weightedAverage(players, "defense");
+  const playerForm = weightedAverage(players, "form");
+  const attackCore = playerAttack * 0.24 + playerCreation * 0.18 + team.attack * 0.22 + team.teamForm * 0.14 + baseline * 0.12 + recentAttack * 0.1;
+  const defenseCore = playerDefense * 0.18 + team.defense * 0.24 + team.goalkeeper * 0.22 + team.teamForm * 0.12 + baseline * 0.12 + recentDefense * 0.12;
+  const experienceCore = team.tournamentExperience * 0.42 + baseline * 0.28 + team.teamForm * 0.16 + team.setPiece * 0.14;
+  const playerCore = playerAttack * 0.28 + playerCreation * 0.2 + playerForm * 0.22 + weightedAverage(players, "influence") * 0.3;
+  const strength = attackCore * 0.32 + defenseCore * 0.26 + experienceCore * 0.2 + playerCore * 0.14 + baseline * 0.08;
   return {
     attack: Math.round(attackCore),
     defense: Math.round(defenseCore),
     experience: Math.round(experienceCore),
     setPiece: team.setPiece,
     form: team.teamForm,
+    baseline,
+    strength: Math.round(strength),
+    recent,
     players
   };
 }
@@ -522,7 +650,7 @@ function poisson(lambda, k) {
 function scoreFitByGua(gua, homeGoals, awayGoals, homePower, awayPower) {
   const total = homeGoals + awayGoals;
   const diff = homeGoals - awayGoals;
-  const dataEdge = homePower.attack + homePower.experience - awayPower.defense - awayPower.experience;
+  const dataEdge = resultDataEdge(homePower, awayPower);
   let fit = 1;
   if (gua.homeBoost > gua.awayBoost + 0.16 && diff > 0) fit += 0.22;
   if (gua.awayBoost > gua.homeBoost + 0.16 && diff < 0) fit += 0.22;
@@ -531,15 +659,17 @@ function scoreFitByGua(gua, homeGoals, awayGoals, homePower, awayPower) {
   if (gua.paceBoost > 0.18 && total >= 3) fit += 0.18;
   if (gua.paceBoost < -0.12 && total <= 2) fit += 0.16;
   if (gua.movingCount >= 3 && Math.abs(diff) === 1 && total >= 2) fit += 0.12;
-  if (dataEdge > 18 && diff > 0) fit += 0.1;
-  if (dataEdge < -18 && diff < 0) fit += 0.1;
+  if (dataEdge > 12 && diff > 0) fit += 0.12;
+  if (dataEdge < -12 && diff < 0) fit += 0.12;
+  if (dataEdge > 16 && diff < 0) fit -= 0.16;
+  if (dataEdge < -16 && diff > 0) fit -= 0.16;
   return fit;
 }
 
 function omenScoreBias(gua, homeGoals, awayGoals, homePower, awayPower) {
   const total = homeGoals + awayGoals;
   const diff = homeGoals - awayGoals;
-  const dataEdge = homePower.attack + homePower.form + homePower.experience - awayPower.attack - awayPower.form - awayPower.experience;
+  const dataEdge = resultDataEdge(homePower, awayPower);
   const guaEdge = gua.homeBoost - gua.awayBoost;
   let bias = 0;
   if (gua.scoreGate === "守中求破") {
@@ -587,7 +717,7 @@ function historicalScoreBias(gua, homeGoals, awayGoals, homePower, awayPower) {
   const key = `${homeGoals}-${awayGoals}`;
   const reverseKey = `${awayGoals}-${homeGoals}`;
   const anchors = gateAnchors[gua.scoreGate] || [];
-  const dataEdge = homePower.attack + homePower.form + homePower.experience - awayPower.attack - awayPower.form - awayPower.experience;
+  const dataEdge = resultDataEdge(homePower, awayPower);
   let bias = historicalScorePriors[key] || (historicalScorePriors[reverseKey] ? historicalScorePriors[reverseKey] * 0.72 : 0);
   if (anchors.includes(key)) bias += 0.034;
   if (anchors.includes(reverseKey)) bias += 0.018;
@@ -605,7 +735,7 @@ function scenarioProfile(context = state.context) {
 function scenarioScoreBias(scenario, homeGoals, awayGoals, homePower, awayPower) {
   const total = homeGoals + awayGoals;
   const diff = homeGoals - awayGoals;
-  const dataEdge = homePower.attack + homePower.form + homePower.experience - awayPower.attack - awayPower.form - awayPower.experience;
+  const dataEdge = resultDataEdge(homePower, awayPower);
   let bias = 0;
   if (diff === 0) bias += scenario.draw * 0.16;
   if (total >= 3) bias += scenario.highGoal * 0.16;
@@ -646,52 +776,120 @@ function directionFit(gua, homeGoals, awayGoals) {
   return -0.1;
 }
 
+function resultDataEdge(homePower, awayPower) {
+  return (
+    (homePower.strength - awayPower.strength) * 0.42 +
+    (homePower.attack - awayPower.defense) * 0.22 +
+    (homePower.form - awayPower.form) * 0.12 +
+    (homePower.experience - awayPower.experience) * 0.12 +
+    (homePower.recent.pointsPerGame - awayPower.recent.pointsPerGame) * 4 +
+    (homePower.recent.goalDiffPerGame - awayPower.recent.goalDiffPerGame) * 5
+  );
+}
+
+function dataAwareDirectionFit(gua, homeGoals, awayGoals, homePower, awayPower) {
+  const diff = homeGoals - awayGoals;
+  const guaFit = directionFit(gua, homeGoals, awayGoals);
+  const dataEdge = resultDataEdge(homePower, awayPower);
+  if (diff === 0) return Math.abs(dataEdge) >= 15 ? guaFit - 0.05 : guaFit + 0.04;
+  if (dataEdge >= 12 && diff > 0) return guaFit + 0.14;
+  if (dataEdge <= -12 && diff < 0) return guaFit + 0.14;
+  if (dataEdge >= 12 && diff < 0) return guaFit - 0.24;
+  if (dataEdge <= -12 && diff > 0) return guaFit - 0.24;
+  return guaFit;
+}
+
+function resultPlausibility(homeGoals, awayGoals, homePower, awayPower) {
+  const diff = homeGoals - awayGoals;
+  const dataEdge = resultDataEdge(homePower, awayPower);
+  const strengthGap = homePower.strength - awayPower.strength;
+  const favoriteGap = Math.abs(strengthGap);
+  let multiplier = 1;
+  if (diff === 0) {
+    if (favoriteGap >= 18) multiplier -= 0.14;
+    if (favoriteGap <= 8) multiplier += 0.06;
+  } else {
+    const homeWins = diff > 0;
+    const resultAgainstData = (homeWins && dataEdge < -10) || (!homeWins && dataEdge > 10);
+    const weakerWins = (homeWins && strengthGap < -10) || (!homeWins && strengthGap > 10);
+    if (weakerWins) multiplier -= clamp((favoriteGap - 8) / 42, 0.12, 0.5);
+    if (resultAgainstData) multiplier -= clamp((Math.abs(dataEdge) - 8) / 45, 0.1, 0.42);
+    if (Math.abs(diff) >= 2 && weakerWins) multiplier -= 0.18;
+    if (!resultAgainstData && !weakerWins) multiplier += clamp(favoriteGap / 90, 0.04, 0.16);
+  }
+  const winnerRecentLift =
+    diff > 0
+      ? homePower.recent.pointsPerGame - awayPower.recent.pointsPerGame + (homePower.recent.goalsForPerGame - awayPower.recent.goalsForPerGame) * 0.4
+      : awayPower.recent.pointsPerGame - homePower.recent.pointsPerGame + (awayPower.recent.goalsForPerGame - homePower.recent.goalsForPerGame) * 0.4;
+  if (diff !== 0 && winnerRecentLift > 0.8) multiplier += 0.1;
+  if (diff !== 0 && winnerRecentLift < -0.8) multiplier -= 0.1;
+  return clamp(multiplier, 0.24, 1.18);
+}
+
 function dataScoreFit(homeGoals, awayGoals, homeLambda, awayLambda, homePower, awayPower) {
   const expectedHome = clamp(Math.round(homeLambda), 0, 6);
   const expectedAway = clamp(Math.round(awayLambda), 0, 6);
   const closeness = 1 / (1 + Math.abs(homeGoals - expectedHome) + Math.abs(awayGoals - expectedAway));
   const diff = homeGoals - awayGoals;
-  const dataEdge = homePower.attack + homePower.form + homePower.experience - awayPower.attack - awayPower.form - awayPower.experience;
+  const dataEdge = resultDataEdge(homePower, awayPower);
   let edgeFit = 0;
-  if (dataEdge > 18 && diff > 0) edgeFit = 0.16;
-  if (dataEdge < -18 && diff < 0) edgeFit = 0.16;
-  if (Math.abs(dataEdge) <= 18 && Math.abs(diff) <= 1) edgeFit = 0.1;
+  if (dataEdge > 12 && diff > 0) edgeFit = 0.18;
+  if (dataEdge < -12 && diff < 0) edgeFit = 0.18;
+  if (Math.abs(dataEdge) <= 12 && Math.abs(diff) <= 1) edgeFit = 0.12;
+  if (dataEdge > 16 && diff < 0) edgeFit -= 0.18;
+  if (dataEdge < -16 && diff > 0) edgeFit -= 0.18;
   return closeness * 0.34 + edgeFit;
 }
 
 function modeScore(candidate, mode, gua, scenario, homeLambda, awayLambda, homePower, awayPower) {
   const scoreKey = `${candidate.home}-${candidate.away}`;
   const anchorFit = (gateAnchors[gua.scoreGate] || []).includes(scoreKey) ? 0.18 : 0;
-  const guaScore = candidate.guaFit * 0.23 + candidate.omenBias * 3.4 + directionFit(gua, candidate.home, candidate.away) + anchorFit;
+  const guaScore = candidate.guaFit * 0.2 + candidate.omenBias * 3 + dataAwareDirectionFit(gua, candidate.home, candidate.away, homePower, awayPower) + anchorFit;
   const dataScore = candidate.base * 3.8 + dataScoreFit(candidate.home, candidate.away, homeLambda, awayLambda, homePower, awayPower);
   const historyScore = candidate.historyBias * 4.2;
   const volatility = candidate.home + candidate.away >= 3 ? (0.04 + Math.max(0, scenario.highGoal) * 0.08) * mode.risk : 0;
   const lowScoreBrake = candidate.home + candidate.away <= 1 && gua.paceBoost > 0.12 ? -0.12 : 0;
-  return Math.max(0.0001, mode.gua * guaScore + mode.data * dataScore + mode.history * historyScore + candidate.scenarioBias * 2.8 + volatility + lowScoreBrake + candidate.salt * 0.015);
+  const score = mode.gua * guaScore + mode.data * dataScore + mode.history * historyScore + candidate.scenarioBias * 2.8 + volatility + lowScoreBrake + candidate.salt * 0.015;
+  return Math.max(0.0001, score * candidate.plausibility);
 }
 
 function recommendationRate(candidate, index, topScore, mode, gua, scenario, homeLambda, awayLambda, homePower, awayPower) {
   const relative = Math.pow(candidate.modeRaw / topScore, 0.72);
   const scoreKey = `${candidate.home}-${candidate.away}`;
   const anchor = (gateAnchors[gua.scoreGate] || []).includes(scoreKey) ? 9 : 0;
-  const direction = directionFit(gua, candidate.home, candidate.away) > 0.1 ? 8 : 0;
+  const guaDirection = directionFit(gua, candidate.home, candidate.away);
+  const dataDirection = dataAwareDirectionFit(gua, candidate.home, candidate.away, homePower, awayPower);
+  const direction = dataDirection > 0.1 ? 8 : 0;
   const dataFit = dataScoreFit(candidate.home, candidate.away, homeLambda, awayLambda, homePower, awayPower) > 0.25 ? 7 : 0;
   const scenarioFit = candidate.scenarioBias > 0.025 ? 8 : candidate.scenarioBias > 0.01 ? 4 : 0;
   const movingCertainty = Math.min(12, gua.movingCount * 3);
   const modeCertainty = mode.name === "偏六爻断法" ? Math.abs(gua.homeBoost - gua.awayBoost) * 16 : mode.name === "偏数据断法" ? Math.abs(homeLambda - awayLambda) * 6 : 6;
+  const plausibilityAdjustment = Math.round((candidate.plausibility - 1) * 26);
   const rankPenalty = index * 10;
-  return clamp(Math.round(42 + relative * 34 + anchor + direction + dataFit + scenarioFit + movingCertainty + modeCertainty - rankPenalty), 32, 99);
+  const rawRate = Math.round(42 + relative * 34 + anchor + direction + dataFit + scenarioFit + movingCertainty + modeCertainty + plausibilityAdjustment - rankPenalty);
+  const cap = guaDirection < 0.05 ? 92 : candidate.plausibility < 0.72 ? 78 : 99;
+  return clamp(rawRate, 28, cap);
 }
 
-function scoreRationale(candidate, mode, gua, scenario, homeLambda, awayLambda) {
+function scoreRationale(candidate, mode, gua, scenario, homeLambda, awayLambda, homePower, awayPower) {
   const scoreKey = `${candidate.home}-${candidate.away}`;
   const total = candidate.home + candidate.away;
   const diff = candidate.home - candidate.away;
   const anchorHit = (gateAnchors[gua.scoreGate] || []).includes(scoreKey);
+  const dataEdge = resultDataEdge(homePower, awayPower);
+  const dataAligned = (diff > 0 && dataEdge > 8) || (diff < 0 && dataEdge < -8) || (diff === 0 && Math.abs(dataEdge) <= 10);
+  const upsetText =
+    candidate.plausibility < 0.72
+      ? "但该比分与球队实力或近期进球数据相冲，只作低把握度变爻保留"
+      : Math.abs(dataEdge) >= 12
+        ? "球队实力、球员攻击力和近期赛果与该方向基本同向"
+        : "双方基本面接近，比分更看临场细节";
   const directionText =
     diff === 0
       ? "世应相持，平局形态被保留"
-      : directionFit(gua, candidate.home, candidate.away) > 0.1
+      : directionFit(gua, candidate.home, candidate.away) < 0.05 && dataAligned
+        ? "卦象锚点不完全顺世应，但球队实力和近期数据支持该方向"
+        : dataAwareDirectionFit(gua, candidate.home, candidate.away, homePower, awayPower) > 0.1
         ? "世应方向与比分胜负一致"
         : "作为变爻反向结果保留";
   const goalText = total >= 4 ? "进球盘打开，属于大球候选" : total >= 3 ? "有进球窗口，但仍在可控比分带" : "防守秩序较重，偏小比分";
@@ -702,7 +900,7 @@ function scoreRationale(candidate, mode, gua, scenario, homeLambda, awayLambda) 
         ? `数据权重较高，贴近 ${homeLambda.toFixed(1)}-${awayLambda.toFixed(1)} 的进球期望`
         : "综合六爻、数据和历史比分形态";
   const scenarioText = candidate.scenarioBias > 0.02 ? `比赛场景吻合“${scenario.name}”的积分压力` : `比赛场景按“${scenario.name}”修正`;
-  return `${anchorHit ? "命中卦门锚点；" : ""}${directionText}；${goalText}；${modeText}；${scenarioText}。`;
+  return `${anchorHit ? "命中卦门锚点；" : ""}${directionText}；${goalText}；${modeText}；${scenarioText}；${upsetText}。`;
 }
 
 function calculateForecast(contextOverride = state.context) {
@@ -716,14 +914,35 @@ function calculateForecast(contextOverride = state.context) {
   const contextPace = scenario.pace;
   const recentGoalLift = finishedGoalBaseline();
   const seedNoise = ((hashText(`${match.id}|${state.castTime}|score-qimen`) % 41) - 20) / 160;
-  const homeDataEdge = (home.attack - away.defense) / 22 + (home.form - away.form) / 52 + (home.experience - away.experience) / 54 + (home.setPiece - away.setPiece) / 92;
-  const awayDataEdge = (away.attack - home.defense) / 22 + (away.form - home.form) / 52 + (away.experience - home.experience) / 54 + (away.setPiece - home.setPiece) / 92;
-  const homeQuality = (home.attack + home.setPiece - 142) / 110;
-  const awayQuality = (away.attack + away.setPiece - 142) / 110;
-  const homeLambda = clamp(1.28 + homeQuality + homeDataEdge * weights.data + gua.homeBoost * weights.liuyao * 1.32 + gua.paceBoost + contextPace + scenario.highGoal * 0.2 + recentGoalLift + seedNoise, 0.2, 5.4);
-  const awayLambda = clamp(1.22 + awayQuality + awayDataEdge * weights.data + gua.awayBoost * weights.liuyao * 1.32 + gua.paceBoost + contextPace + scenario.highGoal * 0.2 + recentGoalLift - seedNoise / 2, 0.2, 5.4);
-  const targetHome = clamp(Math.round(homeLambda + gua.homeBoost + (home.attack - away.defense) / 95), 0, 5);
-  const targetAway = clamp(Math.round(awayLambda + gua.awayBoost + (away.attack - home.defense) / 95), 0, 5);
+  const homeRecentAttack = home.recent.played ? (home.recent.goalsForPerGame - 1.15) * 0.22 : 0;
+  const awayRecentAttack = away.recent.played ? (away.recent.goalsForPerGame - 1.15) * 0.22 : 0;
+  const homeRecentDefense = home.recent.played ? (1.1 - home.recent.goalsAgainstPerGame) * 0.12 : 0;
+  const awayRecentDefense = away.recent.played ? (1.1 - away.recent.goalsAgainstPerGame) * 0.12 : 0;
+  const homeDataEdge =
+    (home.attack - away.defense) / 26 +
+    (home.strength - away.strength) / 38 +
+    (home.form - away.form) / 64 +
+    (home.experience - away.experience) / 70 +
+    (home.setPiece - away.setPiece) / 110 +
+    homeRecentAttack -
+    awayRecentDefense;
+  const awayDataEdge =
+    (away.attack - home.defense) / 26 +
+    (away.strength - home.strength) / 38 +
+    (away.form - home.form) / 64 +
+    (away.experience - home.experience) / 70 +
+    (away.setPiece - home.setPiece) / 110 +
+    awayRecentAttack -
+    homeRecentDefense;
+  const homeQuality = (home.attack + home.strength + home.setPiece - 210) / 155;
+  const awayQuality = (away.attack + away.strength + away.setPiece - 210) / 155;
+  const homeGuaBoost = clamp(gua.homeBoost, -0.18, home.strength + 10 < away.strength ? 0.12 : 0.34);
+  const awayGuaBoost = clamp(gua.awayBoost, -0.18, away.strength + 10 < home.strength ? 0.12 : 0.34);
+  const sharedPace = gua.paceBoost * 0.72 + contextPace + scenario.highGoal * 0.18 + recentGoalLift;
+  const homeLambda = clamp(1.12 + homeQuality + homeDataEdge * weights.data + homeGuaBoost * weights.liuyao * 0.92 + sharedPace + seedNoise * 0.35, 0.15, 5.2);
+  const awayLambda = clamp(1.12 + awayQuality + awayDataEdge * weights.data + awayGuaBoost * weights.liuyao * 0.92 + sharedPace - seedNoise * 0.35, 0.15, 5.2);
+  const targetHome = clamp(Math.round(homeLambda + homeGuaBoost * 0.35 + (home.attack - away.defense) / 120 + (home.strength - away.strength) / 160), 0, 5);
+  const targetAway = clamp(Math.round(awayLambda + awayGuaBoost * 0.35 + (away.attack - home.defense) / 120 + (away.strength - home.strength) / 160), 0, 5);
   const candidates = [];
   for (let h = 0; h <= 5; h += 1) {
     for (let a = 0; a <= 5; a += 1) {
@@ -736,8 +955,9 @@ function calculateForecast(contextOverride = state.context) {
       const scenarioBias = scenarioScoreBias(scenario, h, a, home, away);
       const salt = 1 + (((hashText(`${gua.seed}|${h}-${a}|${match.home}|${match.away}`) % 29) - 14) / 120);
       const extremeBrake = h + a >= 7 ? 0.72 : 1;
-      const raw = (base * guaFit + setPieceBump + targetFit * base + omenBias + historyBias + scenarioBias) * salt * extremeBrake;
-      candidates.push({ home: h, away: a, base, guaFit, omenBias, historyBias, scenarioBias, setPieceBump, targetFit, salt, raw });
+      const plausibility = resultPlausibility(h, a, home, away);
+      const raw = (base * guaFit + setPieceBump + targetFit * base + omenBias + historyBias + scenarioBias) * salt * extremeBrake * plausibility;
+      candidates.push({ home: h, away: a, base, guaFit, omenBias, historyBias, scenarioBias, setPieceBump, targetFit, salt, plausibility, raw });
     }
   }
   candidates.forEach((candidate) => {
@@ -749,7 +969,7 @@ function calculateForecast(contextOverride = state.context) {
   const scores = top.map((item) => ({
     ...item,
     probability: recommendationRate(item, top.indexOf(item), topScore, mode, gua, scenario, homeLambda, awayLambda, home, away),
-    rationale: scoreRationale(item, mode, gua, scenario, homeLambda, awayLambda)
+    rationale: scoreRationale(item, mode, gua, scenario, homeLambda, awayLambda, home, away)
   }));
   return { match, home, away, gua, homeLambda, awayLambda, scores, recommendationMode: mode.name, scenario, recentGoalLift };
 }
@@ -939,7 +1159,7 @@ function renderScoreInsights(forecast) {
     <article class="panel data-panel">
       <h3>比分为什么集中在这几组</h3>
       <p>六爻盘面显示“${gua.shiYing}”，${gua.usefulGod}。本场不是套用固定比分模板，而是先看世应强弱，再看子孙、官鬼、兄弟三类爻对进球、压力和胶着程度的牵引。</p>
-      <p>当前 ${homeName} 攻击 ${home.attack} / 防守 ${home.defense}，${awayName} 攻击 ${away.attack} / 防守 ${away.defense}。已完赛进球修正为 ${recentGoalLift.toFixed(2)}。推荐率是单个比分的把握度，不要求四个比分加起来等于 100%。</p>
+      <p>当前 ${homeName} 综合实力 ${home.strength}、攻击 ${home.attack} / 防守 ${home.defense}，已赛 ${home.recent.played} 场，场均进球 ${home.recent.goalsForPerGame.toFixed(2)}；${awayName} 综合实力 ${away.strength}、攻击 ${away.attack} / 防守 ${away.defense}，已赛 ${away.recent.played} 场，场均进球 ${away.recent.goalsForPerGame.toFixed(2)}。已完赛进球修正为 ${recentGoalLift.toFixed(2)}。推荐率是单个比分的把握度，不要求四个比分加起来等于 100%。</p>
     </article>
     <article class="panel data-panel">
       <h3>发布口径</h3>
@@ -984,19 +1204,19 @@ function renderEvidence(forecast) {
     <p>${gua.usefulGod}。卦门为<strong>${gua.scoreGate}</strong>，${gua.gateTone} 当前比赛场景为<strong>${scenario.name}</strong>，${scenario.tone} 动爻数量为 ${gua.movingCount}，说明比赛不是机械套用小比分，而是要看进球爻、压力爻、积分压力和世应位置如何共同落到比分区间。</p>
   `;
   if (playerNode) playerNode.innerHTML = `
-    <p>${homeName} 攻击 ${home.attack}、防守 ${home.defense}、经验 ${home.experience}；${awayName} 攻击 ${away.attack}、防守 ${away.defense}、经验 ${away.experience}。</p>
+    <p>${homeName} 综合实力 ${home.strength}、攻击 ${home.attack}、防守 ${home.defense}、经验 ${home.experience}、已赛场均进球 ${home.recent.goalsForPerGame.toFixed(2)}；${awayName} 综合实力 ${away.strength}、攻击 ${away.attack}、防守 ${away.defense}、经验 ${away.experience}、已赛场均进球 ${away.recent.goalsForPerGame.toFixed(2)}。</p>
     <div class="player-table">
       ${[
-        ...teams[match.home].players.slice(0, 3).map((player) => ({ player, teamName: match.home })),
-        ...teams[match.away].players.slice(0, 3).map((player) => ({ player, teamName: match.away }))
+        ...resolveTeamProfile(match.home).players.slice(0, 3).map((player) => ({ player, teamName: match.home })),
+        ...resolveTeamProfile(match.away).players.slice(0, 3).map((player) => ({ player, teamName: match.away }))
       ]
         .map(({ player, teamName }) => `<div class="player-row"><span>${displayPlayerName(player, teamName)} · ${player.role}</span><b>${player.influence}</b></div>`)
         .join("")}
     </div>
   `;
   if (historyNode) historyNode.innerHTML = `
-    <p>${homeName}：${teams[match.home].recentExperience}</p>
-    <p>${awayName}：${teams[match.away].recentExperience}</p>
+    <p>${homeName}：${resolveTeamProfile(match.home).recentExperience}</p>
+    <p>${awayName}：${resolveTeamProfile(match.away).recentExperience}</p>
     <p>过往经验层不是直接决定比分，而是修正六爻与球员数据的极端值：大赛经验高的球队更容易守住比分，经验少但冲击力强的球队更容易制造单点爆冷。</p>
   `;
 }
@@ -1007,8 +1227,8 @@ function renderEvidenceDetails(forecast) {
   const methodBox = document.querySelector("#method-data");
   if (!teamBox && !playerBox && !methodBox) return;
   const { match, home, away, gua, scenario } = forecast;
-  const homeProfile = teams[match.home];
-  const awayProfile = teams[match.away];
+  const homeProfile = resolveTeamProfile(match.home);
+  const awayProfile = resolveTeamProfile(match.away);
   const homeName = displayTeam(match.home);
   const awayName = displayTeam(match.away);
   if (teamBox) {
@@ -1017,11 +1237,14 @@ function renderEvidenceDetails(forecast) {
         <h3>${homeName} 球队底盘</h3>
         <dl class="metric-grid">
           <div><dt>综合近况</dt><dd>${homeProfile.teamForm}</dd></div>
+          <div><dt>实力基准</dt><dd>${home.baseline}</dd></div>
+          <div><dt>综合实力</dt><dd>${home.strength}</dd></div>
           <div><dt>攻击</dt><dd>${homeProfile.attack}</dd></div>
           <div><dt>防守</dt><dd>${homeProfile.defense}</dd></div>
           <div><dt>门将</dt><dd>${homeProfile.goalkeeper}</dd></div>
           <div><dt>定位球</dt><dd>${homeProfile.setPiece}</dd></div>
           <div><dt>大赛经验</dt><dd>${homeProfile.tournamentExperience}</dd></div>
+          <div><dt>已赛场均进球</dt><dd>${home.recent.goalsForPerGame.toFixed(2)}</dd></div>
         </dl>
         <p>${homeProfile.recentExperience}</p>
       </article>
@@ -1029,11 +1252,14 @@ function renderEvidenceDetails(forecast) {
         <h3>${awayName} 球队底盘</h3>
         <dl class="metric-grid">
           <div><dt>综合近况</dt><dd>${awayProfile.teamForm}</dd></div>
+          <div><dt>实力基准</dt><dd>${away.baseline}</dd></div>
+          <div><dt>综合实力</dt><dd>${away.strength}</dd></div>
           <div><dt>攻击</dt><dd>${awayProfile.attack}</dd></div>
           <div><dt>防守</dt><dd>${awayProfile.defense}</dd></div>
           <div><dt>门将</dt><dd>${awayProfile.goalkeeper}</dd></div>
           <div><dt>定位球</dt><dd>${awayProfile.setPiece}</dd></div>
           <div><dt>大赛经验</dt><dd>${awayProfile.tournamentExperience}</dd></div>
+          <div><dt>已赛场均进球</dt><dd>${away.recent.goalsForPerGame.toFixed(2)}</dd></div>
         </dl>
         <p>${awayProfile.recentExperience}</p>
       </article>
@@ -1042,7 +1268,7 @@ function renderEvidenceDetails(forecast) {
   if (playerBox) {
     playerBox.innerHTML = [match.home, match.away]
       .map((teamName) => {
-        const profile = teams[teamName];
+        const profile = resolveTeamProfile(teamName);
         return `
           <article class="panel data-panel">
             <h3>${displayTeam(teamName)} 核心球员影响力</h3>
